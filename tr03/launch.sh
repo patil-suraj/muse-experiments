@@ -1,1 +1,1 @@
-sbatch /admin/home/suraj/code/muse-experiments/tr02/run.slurm
+sbatch /admin/home/suraj/code/muse-experiments/tr03/run.slurm
