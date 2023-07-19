@@ -16,7 +16,7 @@ conda activate muse
 
 echo "START TIME: $(date)"
 
-CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr03/config.yaml
+CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr04/config.yaml
 OUTPUT_DIR=/fsx/suraj/oai-clip-eos-pad
 MUSE_REPO=/admin/home/suraj/code/muse
 LOG_PATH=$OUTPUT_DIR/main_log.txt
