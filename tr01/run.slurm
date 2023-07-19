@@ -17,7 +17,7 @@ conda activate muse
 echo "START TIME: $(date)"
 
 MUSE_REPO=/admin/home/suraj/code/muse
-OUTPUT_DIR=/fsx/suraj/laiona6plus-clip-pool-embeds
+OUTPUT_DIR=/fsx/suraj/oai-clip-lbl-smooth
 LOG_PATH=$OUTPUT_DIR/main_log.txt
 CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr01/config.yaml
 
