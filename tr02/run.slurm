@@ -19,7 +19,7 @@ echo "START TIME: $(date)"
 MUSE_REPO=/admin/home/suraj/code/muse
 OUTPUT_DIR=/fsx/suraj/oai-clip-norms
 LOG_PATH=$OUTPUT_DIR/main_log.txt
-CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr01/config.yaml
+CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr02/config.yaml
 
 mkdir -p $OUTPUT_DIR
 touch $LOG_PATH
