@@ -7,7 +7,7 @@ experiment:
     output_dir: "fsx/suraj/oai-clip-low-lr"
     max_train_examples: 8974320 # toal sucessfully downloaded images for laiona6plus
     max_eval_examples: 8118
-    save_every: 1000
+    save_every: 2000
     eval_every: 1000
     generate_every: 1000
     log_every: 50
