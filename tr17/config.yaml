@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "coyo-f8-filtered"
-    output_dir: "coyo-f8-filtered"
+    name: "laiona5-f8-filtered"
+    output_dir: "laiona5-f8-filtered"
     max_train_examples: 700000000 # toal sucessfully downloaded images for laiona6plus
     max_eval_examples: 8118
     save_every: 2000
@@ -67,9 +67,8 @@ model:
 dataset:
     type: "text2image"
     params:
-    
-        train_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/hf-datasets-coyo-700m-pre-encoded/{00000..74749}.tar -"
-        eval_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/hf-datasets-coyo-700m-pre-encoded/{74750..74751}.tar -"
+        train_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/hf-datasets-laion-aesthetics-v2-5-plus-data-pre-encoded/{00000..60578}.tar -"
+        eval_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/hf-datasets-laion-aesthetics-v2-5-plus-data-pre-encoded/{60579..60580}.tar -"
         validation_prompts_file: "validation_prompts/dalle_mini_prompts.txt"
         batch_size: ${training.batch_size}
         shuffle_buffer_size: 1000
