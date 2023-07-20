@@ -108,7 +108,7 @@ training:
     enable_tf32: True
     use_ema: True
     ema_decay: 0.9999
-    ema_update_after_steps: 0
+    ema_update_after_step: 0
     ema_update_every: 1
     seed: 9345104
     max_train_steps: 100000
