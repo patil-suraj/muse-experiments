@@ -1,5 +1,5 @@
 wandb:
-  entity: psurah
+  entity: psuraj
 
 experiment:
     project: "muse"
