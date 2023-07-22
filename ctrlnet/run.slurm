@@ -28,7 +28,7 @@ pushd $REPO
 
 GPUS_PER_NODE=8
 NNODES=$SLURM_NNODES
-NUM_GPUS=$((NUM_GPUS_PER_NODE*SLURM_NNODES))
+NUM_GPUS=$((GPUS_PER_NODE*SLURM_NNODES))
 
 # so processes know who to talk to
 MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
