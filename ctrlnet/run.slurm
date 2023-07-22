@@ -85,6 +85,7 @@ export LAUNCHER="accelerate launch \
     --config_file $ACCELERATE_CONFIG_FILE \
     --main_process_ip $MASTER_ADDR \
     --main_process_port $MASTER_PORT \
+    --num_processes $NUM_GPUS \
     --machine_rank \$SLURM_PROCID \
     "
 
