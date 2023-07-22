@@ -76,6 +76,7 @@ PROGRAM="train_controlnet_webdataset.py \
     --gradient_accumulation_steps=1 \
     --seed=42 \
     --report_to=wandb \
+    --resume_from_checkpoint=latest \
     --push_to_hub
     "
 
