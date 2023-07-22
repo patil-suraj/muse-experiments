@@ -53,7 +53,7 @@ EOT
 
 export MODEL_DIR="stabilityai/stable-diffusion-xl-base-0.9"
 
-PROGRAM="train_controlnet_webdatasets.py \
+PROGRAM="train_controlnet_webdataset.py \
     --pretrained_model_name_or_path=$MODEL_DIR \
     --pretrained_vae_model_name_or_path=madebyollin/sdxl-vae-fp16-fix \
     --output_dir=$OUTPUT_DIR \
