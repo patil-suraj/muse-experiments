@@ -165,7 +165,7 @@ class ImageNetTransform:
 
 
 class WebdatasetFilter:
-    def __init__(self, min_size=768, max_pwatermark=0.5):
+    def __init__(self, min_size=1024, max_pwatermark=0.5):
         self.min_size = min_size
         self.max_pwatermark = max_pwatermark
 
