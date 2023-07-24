@@ -30,6 +30,7 @@ model:
         vocab_size: 8256 # (8192 + 1 for <mask> = 8193 but 8256 is the next multiple of 8)
         hidden_size: 1024
         intermediate_size: 4096
+        ffn_type: "vanilla"
         num_hidden_layers: 22
         num_attention_heads: 16
         max_position_embeddings: 256
