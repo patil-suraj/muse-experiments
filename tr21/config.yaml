@@ -4,7 +4,7 @@ wandb:
 experiment:
     project: "muse"
     name: "oai-clip-transformer"
-    output_dir: "oai-clip-transformer"
+    output_dir: "oai-clip-transformer-2"
     max_train_examples: 8974320 # toal sucessfully downloaded images for laiona6plus
     max_eval_examples: 8118
     save_every: 1000
@@ -12,7 +12,7 @@ experiment:
     generate_every: 1000
     log_every: 50
     log_grad_norm_every: 500
-    resume_from_checkpoint: latest
+    resume_from_checkpoint: False
     resume_lr_scheduler: True
 
 model:

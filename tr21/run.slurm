@@ -17,7 +17,7 @@ conda activate muse
 echo "START TIME: $(date)"
 
 MUSE_REPO=/admin/home/suraj/code/muse
-OUTPUT_DIR=/fsx/suraj/oai-clip-transformer
+OUTPUT_DIR=/fsx/suraj/oai-clip-transformer-2
 LOG_PATH=$OUTPUT_DIR/main_log.txt
 CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr21/config.yaml
 
