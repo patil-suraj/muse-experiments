@@ -56,7 +56,7 @@ dataset:
     type: "text2image"
     params:
         train_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-data/{00000..01208}.tar -"
-        eval_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-data/{01209..01210}.tar -"
+        eval_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/coco/2014/val/{00000..00010}.tar -"
         validation_prompts_file: "validation_prompts/dalle_mini_prompts.txt"
         batch_size: ${training.batch_size}
         shuffle_buffer_size: 1000
@@ -108,3 +108,8 @@ training:
     use_soft_code_target: False
     use_stochastic_code: False
     soft_code_temp: 1.0
+    eval_mask_ratios:
+        - 1.0
+        - 0.7
+        - 0.5
+        - 0.2
