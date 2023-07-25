@@ -40,7 +40,7 @@ model:
         block_has_attention:
             - True
         block_num_heads: 12
-        num_res_blocks: 2
+        num_res_blocks: 3
         patch_size: 1
         encoder_hidden_size: 768
         add_cross_attention: True
