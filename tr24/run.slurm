@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=laiona6plus-f8-block-attn
-#SBATCH --nodes=1
+#SBATCH --job-name=laiona6plus-f8-1B
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
 #SBATCH --gres=gpu:8
@@ -16,8 +16,8 @@ conda activate muse
 
 echo "START TIME: $(date)"
 
-CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr23/config.yaml
-OUTPUT_DIR=/fsx/suraj/laiona6plus-f8-block-attn
+CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr24/config.yaml
+OUTPUT_DIR=/fsx/suraj/laiona6plus-f8-1B
 MUSE_REPO=/admin/home/suraj/code/muse
 LOG_PATH=$OUTPUT_DIR/main_log.txt
 

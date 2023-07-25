@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "laiona6plus-f8-block-attn"
-    output_dir: "fsx/suraj/laiona6plus-f8-block-attn"
+    name: "laiona6plus-f8-1B"
+    output_dir: "fsx/suraj/laiona6plus-f8-1B"
     max_train_examples: 8974320 # toal sucessfully downloaded images for laiona6plus
     max_eval_examples: 8118
     save_every: 2000
@@ -28,18 +28,14 @@ model:
 
     transformer:
         vocab_size: 8256 # (8192 + 1 for <mask> = 8193 but 8256 is the next multiple of 8)
-        hidden_size: 1024
-        intermediate_size: 4096
-        num_hidden_layers: 22
-        num_attention_heads: 16
-        in_channels: 256
+        hidden_size: 2048
+        intermediate_size: 5120
+        num_hidden_layers: 20
+        num_attention_heads: 32
+        in_channels: 384
         block_out_channels:
             - 512
-            - 768
-        block_has_attention:
-            - True
-            - True
-        block_num_heads: 8
+            - 1024
         num_res_blocks: 2
         patch_size: 1
         encoder_hidden_size: 768
@@ -48,6 +44,7 @@ model:
         codebook_size: 8192
         num_vq_tokens: 1024
         initializer_range: 0.02
+        ffn_type: "vanilla"
         norm_type: "rmsnorm"
         layer_norm_eps: 1e-6
         use_normformer: False
@@ -100,7 +97,7 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    batch_size: 96
+    batch_size: 64
     mixed_precision: "fp16"
     enable_tf32: True
     use_ema: False
