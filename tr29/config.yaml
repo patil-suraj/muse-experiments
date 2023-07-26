@@ -108,7 +108,7 @@ mask_schedule:
 
 training:
     gradient_accumulation_steps: 1
-    batch_size: 64
+    batch_size: 80
     mixed_precision: "fp16"
     enable_tf32: False
     use_ema: False

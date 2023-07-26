@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=laiona5-f8-filtered-384
+#SBATCH --job-name=laiona5-f8-filtered
 #SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
@@ -17,7 +17,7 @@ conda activate muse
 echo "START TIME: $(date)"
 
 CONFIG_PATH=/admin/home/suraj/code/muse-experiments/tr29/config.yaml
-OUTPUT_DIR=/fsx/suraj/laiona5-f8-filtered-384
+OUTPUT_DIR=/fsx/suraj/laiona5-f8-filtered
 MUSE_REPO=/admin/home/suraj/code/muse
 LOG_PATH=$OUTPUT_DIR/main_log.txt
 
