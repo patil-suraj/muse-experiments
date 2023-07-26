@@ -73,7 +73,7 @@ dataset:
         use_filtered_dataset: True
     preprocessing:
         max_seq_length: 77
-        resolution: 256
+        resolution: 384
         center_crop: False
         random_flip: False
 
