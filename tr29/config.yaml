@@ -67,8 +67,8 @@ model:
 dataset:
     type: "text2image"
     params:
-        train_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/hf-datasets-laion-aesthetics-v2-5-plus-data-pre-encoded/{00000..60578}.tar -"
-        eval_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/hf-datasets-laion-aesthetics-v2-5-plus-data-pre-encoded/{60579..60580}.tar -"
+        train_shards_path_or_url: "pipe:aws s3 cp s3://hf-datasets-laion-5b-us-west-2/glacier/laion-data/laion-aesthetics-v2-5-plus-data/{00000..60578}.tar -"
+        eval_shards_path_or_url: "pipe:aws s3 cp s3://hf-datasets-laion-5b-us-west-2/glacier/laion-data/laion-aesthetics-v2-5-plus-data/{60579..60581}.tar -"
         validation_prompts_file: "validation_prompts/dalle_mini_prompts.txt"
         batch_size: ${training.batch_size}
         shuffle_buffer_size: 1000
@@ -108,7 +108,7 @@ mask_schedule:
 
 training:
     gradient_accumulation_steps: 1
-    batch_size: 80
+    batch_size: 64
     mixed_precision: "fp16"
     enable_tf32: False
     use_ema: False
@@ -127,4 +127,3 @@ training:
     use_stochastic_code: False
     soft_code_temp: 1.0
     mask_schedule: "cosine"
-    pre_encode: True
