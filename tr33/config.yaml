@@ -27,7 +27,7 @@ model:
     architecture: "uvit"
 
     transformer:
-        vocab_size: 8256 # (8192 + 1 for <mask> = 8193 but 8256 is the next multiple of 8)
+        vocab_size: 16400 # (8192 + 1 for <mask> = 8193 but 8256 is the next multiple of 8)
         hidden_size: 1024
         intermediate_size: 4096
         num_hidden_layers: 22
