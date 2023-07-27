@@ -1,0 +1,1 @@
+sbatch /admin/home/suraj/code/muse-experiments/tr32/run.slurm
