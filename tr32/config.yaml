@@ -13,7 +13,7 @@ experiment:
     log_every: 50
     log_grad_norm_every: 500
     resume_from_checkpoint: latest
-    resume_lr_scheduler: True
+    resume_lr_scheduler: False
 
 model:
     vq_model:
@@ -48,7 +48,7 @@ model:
         add_cross_attention: True
         project_encoder_hidden_states: False
         codebook_size: 8192
-        num_vq_tokens: 256
+        num_vq_tokens: 1024
         initializer_range: 0.02
         norm_type: "rmsnorm"
         layer_norm_eps: 1e-6
@@ -74,12 +74,12 @@ dataset:
         batch_size: ${training.batch_size}
         shuffle_buffer_size: 1000
         num_workers: 4
-        resolution: 128
+        resolution: 256
         pin_memory: True
         persistent_workers: True
     preprocessing:
         max_seq_length: 77
-        resolution: 128
+        resolution: 256
         center_crop: False
         random_flip: False
 
@@ -87,7 +87,7 @@ dataset:
 optimizer:
     name: fused_adamw
     params: # default adamw params
-        learning_rate: 1e-4
+        learning_rate: 8e-5
         scale_lr: False # scale learning rate by total batch size
         beta1: 0.9
         beta2: 0.999
@@ -104,7 +104,7 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    batch_size: 256
+    batch_size: 128
     mixed_precision: "fp16"
     enable_tf32: True
     use_ema: False
