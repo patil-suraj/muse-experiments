@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=oai-clip-lbl-smooth-laiona6-block-attn-512
-#SBATCH --nodes=2
+#SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
 #SBATCH --gres=gpu:8

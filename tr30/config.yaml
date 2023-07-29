@@ -12,7 +12,7 @@ experiment:
     generate_every: 1000
     log_every: 50
     log_grad_norm_every: 500
-    resume_from_checkpoint: "/fsx/suraj/oai-clip-lbl-smooth-laiona6-block-attn/checkpoint-50000"
+    resume_from_checkpoint: latest
     resume_lr_scheduler: True
 
 model:
@@ -64,7 +64,7 @@ model:
 dataset:
     type: "text2image"
     params:
-        train_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-data/{00000..01210}.tar -"
+        train_shards_path_or_url: "pipe:aws s3 cp s3://hf-datasets-laion-5b-us-west-2/glacier/laion-data/laion-aesthetics-v2-5-plus-data/{00000..60580}.tar -"
         eval_shards_path_or_url: "pipe:aws s3 cp s3://muse-datasets/coco/2014/val/{00000..00010}.tar -"
         validation_prompts_file: "validation_prompts/dalle_mini_prompts.txt"
         batch_size: ${training.batch_size}
