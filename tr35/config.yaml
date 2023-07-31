@@ -12,7 +12,7 @@ experiment:
     generate_every: 1000
     log_every: 50
     log_grad_norm_every: 1000
-    resume_from_checkpoint: /fsx/suraj/coyo-f8-filtered/checkpoint-1110000"
+    resume_from_checkpoint: /fsx/suraj/coyo-f8-filtered/checkpoint-1110000
     resume_lr_scheduler: False
     log_pixel_entropy_every: 2000
     log_image_entropy_every: 2000
