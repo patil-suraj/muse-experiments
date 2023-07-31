@@ -127,4 +127,3 @@ training:
     use_stochastic_code: False
     soft_code_temp: 1.0
     mask_schedule: "cosine"
-    pre_encode: True
