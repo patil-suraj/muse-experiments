@@ -40,17 +40,17 @@ model:
             - True
         block_num_heads: 12
         num_res_blocks: 3
-        res_ffn_factor: 2.5
+        res_ffn_factor: 4
         patch_size: 1
         encoder_hidden_size: 768
         add_cross_attention: True
-        project_encoder_hidden_states: False
+        project_encoder_hidden_states: True
         codebook_size: 8192
         num_vq_tokens: 256
         initializer_range: 0.02
         norm_type: "rmsnorm"
         layer_norm_eps: 1e-6
-        ln_elementwise_affine: False
+        ln_elementwise_affine: True
         use_encoder_layernorm: False
         use_bias: False
         hidden_dropout: 0.0
