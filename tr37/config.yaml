@@ -13,7 +13,7 @@ experiment:
     log_every: 50
     log_grad_norm_every: 500
     resume_from_checkpoint: /fsx/suraj/oai-clip-lbl-smooth-laiona5-resumed/checkpoint-612000
-    resume_lr_scheduler: False
+    resume_lr_scheduler: True
 
 model:
     vq_model:
