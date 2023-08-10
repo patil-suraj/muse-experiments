@@ -12,7 +12,8 @@ experiment:
     generate_every: 1000
     log_every: 50
     log_grad_norm_every: 500
-    resume_from_checkpoint: False
+    resume_from_checkpoint: /fsx/suraj/micro-cond-clip-embed/checkpoint-462000
+    dont_resume_optimizer: True
     resume_lr_scheduler: False
 
 model:
@@ -26,8 +27,6 @@ model:
         pad_token_id: 49407
     
     architecture: "uvit"
-
-    pretrained_model_path: "/fsx/suraj/micro-cond-clip-embed/checkpoint-462000/unwrapped_model/"
 
     transformer:
         vocab_size: 8256 # (8192 + 1 for <mask> = 8193 but 8256 is the next multiple of 8)
