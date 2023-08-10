@@ -13,6 +13,7 @@ experiment:
     log_every: 50
     log_grad_norm_every: 500
     resume_from_checkpoint: /fsx/suraj/micro-cond-clip-embed/checkpoint-462000
+    dont_resume_optimizer: True
     resume_lr_scheduler: False
 
 model:
