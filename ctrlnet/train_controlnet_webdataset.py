@@ -237,7 +237,7 @@ class Text2ImageDataset:
             wds.rename(image="jpg;png;jpeg;webp", control_image="jpg;png;jpeg;webp", text="text;txt;caption", orig_size="json", handler=wds.warn_and_continue),
             wds.map(filter_keys(set(["image", "control_image", "text", "orig_size"]))),
             wds.map_dict(orig_size=get_orig_size),
-            wds.map_dict(functools.partial(image_transform, resolution=resolution)),
+            wds.map(functools.partial(image_transform, resolution=resolution)),
             wds.to_tuple("image", "control_image", "text", "orig_size", "crop_coords"),
         ]
 
