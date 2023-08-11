@@ -1310,7 +1310,7 @@ def main(args):
                 
                 if args.control_type == "depth":
                     control_image = control_image.to(weight_dtype)
-                    with torch.autcast("cuda"):
+                    with torch.autocast("cuda"):
                         depth_map = depth_model(control_image).predicted_depth
                     depth_map = torch.nn.functional.interpolate(
                         depth_map.unsqueeze(1),
