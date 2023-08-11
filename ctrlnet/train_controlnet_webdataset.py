@@ -63,6 +63,7 @@ from typing import List, Optional, Union
 from braceexpand import braceexpand
 from torch.utils.data import default_collate
 from transformers import PreTrainedTokenizer
+from transformers import DPTFeatureExtractor, DPTForDepthEstimation
 from webdataset.tariterators import (
     base_plus_ext,
     tar_file_expander,
@@ -165,17 +166,39 @@ class ImageNetTransform:
         )
 
 
-def image_transform(example, resolution=256):
+def canny_image_transform(example, resolution=1024):
     image = example["image"]
     image = transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR)(image)
     # get crop coordinates
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = transforms.functional.crop(image, c_top, c_left, resolution, resolution)
-    example["image"] =  transforms.ToTensor()(image)
+    control_image = control_transform(image)
+    
+    image = transforms.ToTensor()(image)
+    image = transforms.Normalize([0.5], [0.5])(image)
+    control_image = transforms.ToTensor()(control_image)
+    
+    example["image"] = image
+    example["control_image"] = control_image
     example["crop_coords"] = (c_top, c_left)
     
-    control_image = control_transform(image)
-    example["control_image"] = transforms.ToTensor()(control_image)
+    return example
+
+def depth_image_transform(example, feature_extractor, resolution=1024):
+    image = example["image"]
+    image = transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR)(image)
+    # get crop coordinates
+    c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
+    image = transforms.functional.crop(image, c_top, c_left, resolution, resolution)
+    
+    control_image = feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze(0)
+    
+    image = transforms.ToTensor()(image)
+    image = transforms.Normalize([0.5], [0.5])(image)
+    
+    example["image"] = image
+    example["control_image"] = control_image
+    example["crop_coords"] = (c_top, c_left)
     
     return example
 
@@ -215,6 +238,8 @@ class Text2ImageDataset:
         shuffle_buffer_size: int = 1000,
         pin_memory: bool = False,
         persistent_workers: bool = False,
+        control_type: str = "canny",
+        feature_extractor: Optional[DPTFeatureExtractor] = None,
     ):
         transform = ImageNetTransform(resolution, center_crop, random_flip)
 
@@ -231,12 +256,17 @@ class Text2ImageDataset:
         def get_orig_size(json):
             return (int(json.get("original_width", 0.0)), int(json.get("original_height", 0.0)))
 
+        if control_type == "canny":
+            image_transform = functools.partial(canny_image_transform, resolution=resolution)
+        elif control_type == "depth":
+            image_transform = functools.partial(depth_image_transform, feature_extractor=feature_extractor, resolution=resolution)
+
         processing_pipeline = [
             wds.decode("pil", handler=wds.ignore_and_continue),
             wds.rename(image="jpg;png;jpeg;webp", control_image="jpg;png;jpeg;webp", text="text;txt;caption", orig_size="json", handler=wds.warn_and_continue),
             wds.map(filter_keys(set(["image", "control_image", "text", "orig_size"]))),
             wds.map_dict(orig_size=get_orig_size),
-            wds.map(functools.partial(image_transform, resolution=resolution)),
+            wds.map(image_transform),
             wds.to_tuple("image", "control_image", "text", "orig_size", "crop_coords"),
         ]
 
@@ -364,7 +394,7 @@ def log_validation(vae, unet, controlnet, args, accelerator, weight_dtype, step)
         for _ in range(args.num_validation_images):
             with torch.autocast("cuda"):
                 image = pipeline(
-                    validation_prompt, validation_image, num_inference_steps=20, generator=generator
+                    validation_prompt, image=validation_image, num_inference_steps=20, generator=generator
                 ).images[0]
             images.append(image)
 
@@ -799,6 +829,15 @@ def parse_args(input_args=None):
             " more information see https://huggingface.co/docs/accelerate/v0.17.0/en/package_reference/accelerator#accelerate.Accelerator"
         ),
     )
+    parser.add_argument(
+        "--control_type",
+        type=str,
+        default="canny",
+        help=(
+            "The type of controlnet conditioning image to use. One of `canny`, `depth`"
+            " Defaults to `canny`."
+        ),
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -961,6 +1000,14 @@ def main(args):
     else:
         logger.info("Initializing controlnet weights from unet")
         controlnet = ControlNetModel.from_unet(unet)
+    
+    if args.control_type == "depth":
+        feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
+        depth_model = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas")
+        depth_model.requires_grad_(False)
+    else:
+        feature_extractor = None
+        depth_model = None
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
@@ -1076,6 +1123,8 @@ def main(args):
     unet.to(accelerator.device, dtype=weight_dtype)
     text_encoder_one.to(accelerator.device, dtype=weight_dtype)
     text_encoder_two.to(accelerator.device, dtype=weight_dtype)
+    if args.control_type == "depth":
+        depth_model.to(accelerator.device, dtype=weight_dtype)
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
@@ -1134,6 +1183,8 @@ def main(args):
         shuffle_buffer_size=1000,
         pin_memory=True,
         persistent_workers=True,
+        control_type=args.control_type,
+        feature_extractor=feature_extractor,
     )
     train_dataloader = dataset.train_dataloader
 
@@ -1240,23 +1291,12 @@ def main(args):
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(controlnet):
-                # image, control_image, text, orig_size = batch
                 image, control_image, text, orig_size, crop_coords = batch
-
-                # save image and control image
-                # for i, (img, c_img) in enumerate(zip(image, control_image)):
-                #     to_pil = ToPILImage()
-                #     pil_img = to_pil(img)
-                #     pil_c_img = to_pil(c_img)
-
-                #     pil_img.save(f"/admin/home/patrick/webdatasets_images/image_{i}.png")
-                #     pil_c_img.save(f"/admin/home/patrick/webdatasets_images/c_image_{i}.png")
 
                 encoded_text = compute_embeddings_fn(text, orig_size, crop_coords)
                 image = image.to(accelerator.device, non_blocking=True)
                 control_image = control_image.to(accelerator.device, non_blocking=True)
 
-                # Convert images to latent space
                 if args.pretrained_vae_model_name_or_path is not None:
                     pixel_values = image.to(dtype=weight_dtype)
                     if vae.dtype != weight_dtype:
@@ -1267,6 +1307,22 @@ def main(args):
                 latents = latents * vae.config.scaling_factor
                 if args.pretrained_vae_model_name_or_path is None:
                     latents = latents.to(weight_dtype)
+                
+                if args.control_type == "depth":
+                    control_image = control_image.to(weight_dtype)
+                    with torch.autcast("cuda"):
+                        depth_map = depth_model(control_image).predicted_depth
+                    depth_map = torch.nn.functional.interpolate(
+                        depth_map.unsqueeze(1),
+                        size=latents.shape[2:],
+                        mode="bicubic",
+                        align_corners=False,
+                    )
+                    depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
+                    depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
+                    depth_map = 2.0 * (depth_map - depth_min) / (depth_max - depth_min) - 1.0
+                    control_image = depth_map
+                    control_image = torch.cat([control_image] * 3, dim=1)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
