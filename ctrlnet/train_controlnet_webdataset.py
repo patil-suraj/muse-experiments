@@ -1319,7 +1319,7 @@ def main(args):
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
                 # loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
                 loss = torch.mean(
-                    (weighing * (model_pred - target) ** 2).reshape(target.shape[0], -1), 1
+                    (weighing * (model_pred.float() - target.float()) ** 2).reshape(target.shape[0], -1), 1
                 )
                 loss = loss.mean()
 
