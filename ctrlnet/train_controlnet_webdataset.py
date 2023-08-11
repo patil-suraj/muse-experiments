@@ -245,7 +245,7 @@ class Text2ImageDataset:
         pipeline = [
             wds.ResampledShards(train_shards_path_or_url),
             tarfile_to_samples_nothrow,
-            wds.select(WebdatasetFilter(min_size=512)),
+            # wds.select(WebdatasetFilter(min_size=512)),
             wds.shuffle(shuffle_buffer_size),
             *processing_pipeline,
             wds.batched(per_gpu_batch_size, partial=False, collation_fn=default_collate),
