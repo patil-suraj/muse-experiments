@@ -1280,13 +1280,13 @@ def main(args):
                 # (this is the forward diffusion process)
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
                 sigmas = get_sigmas(timesteps, len(noisy_latents.shape), noisy_latents.dtype)
-                noisy_latents = noisy_latents / ((sigmas**2 + 1) ** 0.5)
+                inp_noisy_latents = noisy_latents / ((sigmas**2 + 1) ** 0.5)
 
                 # ControlNet conditioning.
                 controlnet_image = control_image.to(dtype=weight_dtype)
                 prompt_embeds = encoded_text.pop("prompt_embeds")
                 down_block_res_samples, mid_block_res_sample = controlnet(
-                    noisy_latents,
+                    inp_noisy_latents,
                     timesteps,
                     encoder_hidden_states=prompt_embeds,
                     added_cond_kwargs=encoded_text,
@@ -1296,7 +1296,7 @@ def main(args):
 
                 # Predict the noise residual
                 model_pred = unet(
-                    noisy_latents,
+                    inp_noisy_latents,
                     timesteps,
                     encoder_hidden_states=prompt_embeds,
                     added_cond_kwargs=encoded_text,
