@@ -1320,8 +1320,8 @@ def main(args):
                     )
                     depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
                     depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
-                    depth_map = 2.0 * (depth_map - depth_min) / (depth_max - depth_min) - 1.0
-                    control_image = depth_map
+                    depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+                    control_image = (depth_map * 255.).to(torch.uint8).float() / 255. # hack to match inference
                     control_image = torch.cat([control_image] * 3, dim=1)
 
                 # Sample noise that we'll add to the latents
