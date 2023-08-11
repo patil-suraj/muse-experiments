@@ -1321,6 +1321,7 @@ def main(args):
                 loss = torch.mean(
                     (weighing * (model_pred - target) ** 2).reshape(target.shape[0], -1), 1
                 )
+                loss = loss.mean()
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
