@@ -51,6 +51,7 @@ from diffusers import (
     StableDiffusionXLControlNetPipeline,
     UNet2DConditionModel,
     UniPCMultistepScheduler,
+    EulerDiscreteScheduler,
 )
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
@@ -125,7 +126,7 @@ def tarfile_to_samples_nothrow(src, handler=wds.warn_and_continue):
 
 
 def control_transform(image):
-    image = np.array(image)
+    # image = np.array(image)
 
     low_threshold = 100
     high_threshold = 200
@@ -162,6 +163,22 @@ class ImageNetTransform:
                 transforms.ToTensor(),
             ]
         )
+
+
+def image_transform(example, resolution=256):
+    image = example["image"]
+    image = transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR)(image)
+    # get crop coordinates
+    c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
+    image = transforms.functional.crop(image, c_top, c_left, resolution, resolution)
+    image = transforms.ToTensor()(image)
+    example["image"] = image
+    example["crop_coords"] = (c_top, c_left)
+    
+    control_image = control_transform(image.numpy())
+    example["control_image"] = transformers.ToTensor()(control_image)
+    
+    return example
 
 
 class WebdatasetFilter:
@@ -219,15 +236,16 @@ class Text2ImageDataset:
             wds.decode("pil", handler=wds.ignore_and_continue),
             wds.rename(image="jpg;png;jpeg;webp", control_image="jpg;png;jpeg;webp", text="text;txt;caption", orig_size="json", handler=wds.warn_and_continue),
             wds.map(filter_keys(set(["image", "control_image", "text", "orig_size"]))),
-            wds.map_dict(image=transform.train_transform, control_image=transform.train_control_transform, orig_size=get_orig_size),
-            wds.to_tuple("image", "control_image", "text", "orig_size"),
+            wds.map_dict(orig_size=get_orig_size),
+            wds.map_dict(functools.partial(image_transform, resolution=resolution)),
+            wds.to_tuple("image", "control_image", "text", "orig_size", "crop_coords"),
         ]
 
         # Create train dataset and loader
         pipeline = [
             wds.ResampledShards(train_shards_path_or_url),
             tarfile_to_samples_nothrow,
-            wds.select(WebdatasetFilter()),
+            wds.select(WebdatasetFilter(min_size=512)),
             wds.shuffle(shuffle_buffer_size),
             *processing_pipeline,
             wds.batched(per_gpu_batch_size, partial=False, collation_fn=default_collate),
@@ -310,7 +328,7 @@ def log_validation(vae, unet, controlnet, args, accelerator, weight_dtype, step)
         revision=args.revision,
         torch_dtype=weight_dtype,
     )
-    pipeline.scheduler = UniPCMultistepScheduler.from_config(pipeline.scheduler.config)
+    # pipeline.scheduler = UniPCMultistepScheduler.from_config(pipeline.scheduler.config)
     pipeline = pipeline.to(accelerator.device)
     pipeline.set_progress_bar_config(disable=True)
 
@@ -916,7 +934,8 @@ def main(args):
     )
 
     # Load scheduler and models
-    noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    # noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    noise_scheduler = EulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
     text_encoder_one = text_encoder_cls_one.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision
     )
@@ -1061,22 +1080,27 @@ def main(args):
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
-    def compute_embeddings(prompt_batch, original_sizes, proportion_empty_prompts, text_encoders, tokenizers, is_train=True):
+    def compute_embeddings(prompt_batch, original_sizes, crop_coords, proportion_empty_prompts, text_encoders, tokenizers, is_train=True):
         target_size = (args.resolution, args.resolution)
-        hey = original_sizes
         original_sizes = list(map(list, zip(*original_sizes)))
+        crops_coords_top_left = list(map(list, zip(*crop_coords)))
 
-        crops_coords_top_left = (args.crops_coords_top_left_h, args.crops_coords_top_left_w)
+        original_sizes = torch.tensor(original_sizes, dtype=torch.long)
+        crops_coords_top_left = torch.tensor(crops_coords_top_left, dtype=torch.long)
+
+        # crops_coords_top_left = (args.crops_coords_top_left_h, args.crops_coords_top_left_w)
         prompt_embeds, pooled_prompt_embeds = encode_prompt(
             prompt_batch, text_encoders, tokenizers, proportion_empty_prompts, is_train
         )
         add_text_embeds = pooled_prompt_embeds
 
         # Adapted from pipeline.StableDiffusionXLPipeline._get_add_time_ids
-        add_time_ids = list(crops_coords_top_left + target_size)
+        # add_time_ids = list(crops_coords_top_left + target_size)
+        add_time_ids = list(target_size)
         add_time_ids = torch.tensor([add_time_ids])
         add_time_ids = add_time_ids.repeat(len(prompt_batch), 1)
-        add_time_ids = torch.cat([torch.tensor(original_sizes, dtype=torch.long), add_time_ids], dim=-1)
+        # add_time_ids = torch.cat([torch.tensor(original_sizes, dtype=torch.long), add_time_ids], dim=-1)
+        add_time_ids = torch.cat([original_sizes, crops_coords_top_left, add_time_ids], dim=-1)
         add_time_ids = add_time_ids.to(accelerator.device, dtype=prompt_embeds.dtype)
 
         prompt_embeds = prompt_embeds.to(accelerator.device)
@@ -1084,6 +1108,19 @@ def main(args):
         unet_added_cond_kwargs = {"text_embeds": add_text_embeds, "time_ids": add_time_ids}
 
         return {"prompt_embeds": prompt_embeds, **unet_added_cond_kwargs}
+
+
+    def get_sigmas(timesteps, n_dim=4, dtype=torch.float32):
+        sigmas = noise_scheduler.sigmas.to(device=accelerator.device, dtype=dtype)
+        schedule_timesteps = noise_scheduler.timesteps.to(accelerator.device)
+        timesteps = timesteps.to(accelerator.device)
+
+        step_indices = [(schedule_timesteps == t).nonzero().item() for t in timesteps]
+
+        sigma = sigmas[step_indices].flatten()
+        while len(sigma.shape) < n_dim:
+            sigma = sigma.unsqueeze(-1)
+        return sigma
 
     dataset = Text2ImageDataset(
         train_shards_path_or_url=args.train_shards_path_or_url,
@@ -1204,7 +1241,8 @@ def main(args):
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(controlnet):
-                image, control_image, text, orig_size = batch
+                # image, control_image, text, orig_size = batch
+                image, control_image, text, orig_size, crop_coords = batch
 
                 # save image and control image
                 # for i, (img, c_img) in enumerate(zip(image, control_image)):
@@ -1215,7 +1253,7 @@ def main(args):
                 #     pil_img.save(f"/admin/home/patrick/webdatasets_images/image_{i}.png")
                 #     pil_c_img.save(f"/admin/home/patrick/webdatasets_images/c_image_{i}.png")
 
-                encoded_text = compute_embeddings_fn(text, orig_size)
+                encoded_text = compute_embeddings_fn(text, orig_size, crop_coords)
                 image = image.to(accelerator.device, non_blocking=True)
                 control_image = control_image.to(accelerator.device, non_blocking=True)
 
@@ -1242,6 +1280,7 @@ def main(args):
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                noisy_latents = noise_scheduler.scale_model_input(noisy_latents, timesteps)
 
                 # ControlNet conditioning.
                 controlnet_image = control_image.to(dtype=weight_dtype)
@@ -1267,6 +1306,11 @@ def main(args):
                     mid_block_additional_residual=mid_block_res_sample.to(dtype=weight_dtype),
                 ).sample
 
+                sigmas = get_sigmas(timesteps, len(noisy_latents.shape), noisy_latents.dtype)
+                model_pred = model_pred * (-sigmas) + noisy_latents
+                weighing = sigmas**-2.0
+
+
                 # Get the target for loss depending on the prediction type
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise
@@ -1274,7 +1318,10 @@ def main(args):
                     target = noise_scheduler.get_velocity(latents, noise, timesteps)
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                # loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                loss = torch.mean(
+                    (weighing * (model_pred - target) ** 2).reshape(target.shape[0], -1), 1
+                )
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
