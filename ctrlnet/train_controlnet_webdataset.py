@@ -1314,7 +1314,7 @@ def main(args):
                         depth_map = depth_model(control_image).predicted_depth
                     depth_map = torch.nn.functional.interpolate(
                         depth_map.unsqueeze(1),
-                        size=latents.shape[2:],
+                        size=image.shape[2:],
                         mode="bicubic",
                         align_corners=False,
                     )
@@ -1323,7 +1323,6 @@ def main(args):
                     depth_map = 2.0 * (depth_map - depth_min) / (depth_max - depth_min) - 1.0
                     control_image = depth_map
                     control_image = torch.cat([control_image] * 3, dim=1)
-                    print(control_image.shape)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
