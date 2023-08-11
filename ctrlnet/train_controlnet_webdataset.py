@@ -175,7 +175,7 @@ def image_transform(example, resolution=256):
     example["crop_coords"] = (c_top, c_left)
     
     control_image = control_transform(image)
-    example["control_image"] = transformers.ToTensor()(control_image)
+    example["control_image"] = transforms.ToTensor()(control_image)
     
     return example
 
