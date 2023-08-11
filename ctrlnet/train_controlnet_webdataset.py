@@ -1279,7 +1279,8 @@ def main(args):
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-                noisy_latents = noise_scheduler.scale_model_input(noisy_latents, timesteps)
+                sigmas = get_sigmas(timesteps, len(noisy_latents.shape), noisy_latents.dtype)
+                noisy_latents = noisy_latents / ((sigmas**2 + 1) ** 0.5)
 
                 # ControlNet conditioning.
                 controlnet_image = control_image.to(dtype=weight_dtype)
@@ -1305,7 +1306,6 @@ def main(args):
                     mid_block_additional_residual=mid_block_res_sample.to(dtype=weight_dtype),
                 ).sample
 
-                sigmas = get_sigmas(timesteps, len(noisy_latents.shape), noisy_latents.dtype)
                 model_pred = model_pred * (-sigmas) + noisy_latents
                 weighing = sigmas**-2.0
 
