@@ -126,7 +126,7 @@ def tarfile_to_samples_nothrow(src, handler=wds.warn_and_continue):
 
 
 def control_transform(image):
-    # image = np.array(image)
+    image = np.array(image)
 
     low_threshold = 100
     high_threshold = 200
@@ -171,11 +171,10 @@ def image_transform(example, resolution=256):
     # get crop coordinates
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = transforms.functional.crop(image, c_top, c_left, resolution, resolution)
-    image = transforms.ToTensor()(image)
-    example["image"] = image
+    example["image"] =  transforms.ToTensor()(image)
     example["crop_coords"] = (c_top, c_left)
     
-    control_image = control_transform(image.numpy())
+    control_image = control_transform(image)
     example["control_image"] = transformers.ToTensor()(control_image)
     
     return example
