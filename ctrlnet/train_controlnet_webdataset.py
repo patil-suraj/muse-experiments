@@ -1309,7 +1309,14 @@ def main(args):
                         vae.to(dtype=weight_dtype)
                 else:
                     pixel_values = image
-                latents = vae.encode(pixel_values).latent_dist.sample()
+                
+                # latents = vae.encode(pixel_values).latent_dist.sample()
+                # encode pixel values with batch size of at most 8
+                latents = []
+                for i in range(0, pixel_values.shape[0], 8):
+                    latents.append(vae.encode(pixel_values[i:i+8]).latent_dist.sample())
+                latents = torch.cat(latents, dim=0)
+                
                 latents = latents * vae.config.scaling_factor
                 if args.pretrained_vae_model_name_or_path is None:
                     latents = latents.to(weight_dtype)
