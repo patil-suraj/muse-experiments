@@ -1003,7 +1003,7 @@ def main(args):
 
     controlnet = ControlNetModel.from_config(
         controlnet.config,
-        transformer_layers_per_block=[1, 2, 2]
+        transformer_layers_per_block=[1, 1, 2]
     )
     controlnet.load_state_dict(controlnet.state_dict(), strict=False)
     
