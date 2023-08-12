@@ -1000,6 +1000,12 @@ def main(args):
     else:
         logger.info("Initializing controlnet weights from unet")
         controlnet = ControlNetModel.from_unet(unet)
+
+    controlnet = ControlNetModel.from_config(
+        controlnet.config,
+        transformer_layers_per_block=[1, 1, 1,]
+    )
+    controlnet = controlnet.load_state_dict(controlnet.state_dict(), strict=False)
     
     if args.control_type == "depth":
         feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
