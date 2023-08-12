@@ -1002,7 +1002,7 @@ def main(args):
         pre_controlnet = ControlNetModel.from_unet(unet)
 
     controlnet = ControlNetModel.from_config(
-        controlnet.config,
+        pre_controlnet.config,
         transformer_layers_per_block=[1, 1, 2]
     )
     controlnet.load_state_dict(pre_controlnet.state_dict(), strict=False)
