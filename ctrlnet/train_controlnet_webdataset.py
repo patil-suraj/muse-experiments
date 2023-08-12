@@ -996,16 +996,17 @@ def main(args):
 
     if args.controlnet_model_name_or_path:
         logger.info("Loading existing controlnet weights")
-        controlnet = ControlNetModel.from_pretrained(args.controlnet_model_name_or_path)
+        pre_controlnet = ControlNetModel.from_pretrained(args.controlnet_model_name_or_path)
     else:
         logger.info("Initializing controlnet weights from unet")
-        controlnet = ControlNetModel.from_unet(unet)
+        pre_controlnet = ControlNetModel.from_unet(unet)
 
     controlnet = ControlNetModel.from_config(
         controlnet.config,
         transformer_layers_per_block=[1, 1, 2]
     )
-    controlnet.load_state_dict(controlnet.state_dict(), strict=False)
+    controlnet.load_state_dict(pre_controlnet.state_dict(), strict=False)
+    del pre_controlnet
     
     if args.control_type == "depth":
         feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
