@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=controlnet-sd-xl-1.0-depth--no-attn
-#SBATCH --nodes=2
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:1
 #SBATCH --exclusive
 #SBATCH --partition=production-cluster
 #SBATCH --output=/admin/home/suraj/logs/maskgit-imagenet/%x-%j.out
@@ -26,7 +26,7 @@ touch $LOG_PATH
 pushd $REPO
 
 
-GPUS_PER_NODE=8
+GPUS_PER_NODE=1
 NNODES=$SLURM_NNODES
 NUM_GPUS=$((GPUS_PER_NODE*SLURM_NNODES))
 
