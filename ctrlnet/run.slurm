@@ -70,7 +70,7 @@ PROGRAM="train_controlnet_webdataset.py \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --eval_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{01209..01210}.tar -' \
     --proportion_empty_prompts=0.5 \
-    --validation_steps=1000 \
+    --validation_steps=500 \
     --train_batch_size=16 \
     --gradient_checkpointing \
     --use_8bit_adam \
