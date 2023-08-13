@@ -1011,7 +1011,7 @@ def main(args):
         pre_controlnet = ControlNetModel.from_unet(unet)
     
     if args.transformer_layers_per_block is not None:
-        transformer_layers_per_block = [int(x) for x in transformer_layers_per_block.split(",")]
+        transformer_layers_per_block = [int(x) for x in args.transformer_layers_per_block.split(",")]
         down_block_types = ["DownBlock2D" if l == 0 else "CrossAttnDownBlock2D" for l in transformer_layers_per_block]
         controlnet = ControlNetModel.from_config(
             pre_controlnet.config,
