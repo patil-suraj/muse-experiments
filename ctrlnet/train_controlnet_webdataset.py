@@ -838,6 +838,15 @@ def parse_args(input_args=None):
             " Defaults to `canny`."
         ),
     )
+    parser.add_argument(
+        "--transformer_layers_per_block",
+        type=str,
+        default=None,
+        help=(
+            "The number of layers per block in the transformer. If None, defaults to"
+            " `args.transformer_layers`."
+        ),
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -1000,14 +1009,19 @@ def main(args):
     else:
         logger.info("Initializing controlnet weights from unet")
         pre_controlnet = ControlNetModel.from_unet(unet)
-
-    controlnet = ControlNetModel.from_config(
-        pre_controlnet.config,
-        down_block_types=["DownBlock2D", "DownBlock2D", "DownBlock2D"],
-        transformer_layers_per_block=[0, 0, 0]
-    )
-    controlnet.load_state_dict(pre_controlnet.state_dict(), strict=False)
-    del pre_controlnet
+    
+    if args.transformer_layers_per_block is not None:
+        transformer_layers_per_block = [int(x) for x in transformer_layers_per_block.split(",")]
+        down_block_types = ["DownBlock2D" if l == 0 else "CrossAttnDownBlock2D" for l in transformer_layers_per_block]
+        controlnet = ControlNetModel.from_config(
+            pre_controlnet.config,
+            down_block_types=down_block_types,
+            transformer_layers_per_block=transformer_layers_per_block,
+        )
+        controlnet.load_state_dict(pre_controlnet.state_dict(), strict=False)
+        del pre_controlnet
+    else:
+        controlnet = pre_controlnet
     
     if args.control_type == "depth":
         feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
