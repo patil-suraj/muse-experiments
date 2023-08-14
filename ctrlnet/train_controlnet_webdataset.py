@@ -847,6 +847,15 @@ def parse_args(input_args=None):
             " `args.transformer_layers`."
         ),
     )
+    parser.add_argument(
+        "--old_style_controlnet",
+        action="store_true",
+        default=False,
+        help=(
+            "Use the old style controlnet, which is a single transformer layer with"
+            " a single head. Defaults to False."
+        ),
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -1012,7 +1021,10 @@ def main(args):
     
     if args.transformer_layers_per_block is not None:
         transformer_layers_per_block = [int(x) for x in args.transformer_layers_per_block.split(",")]
-        down_block_types = ["DownBlock2D" if l == 0 else "CrossAttnDownBlock2D" for l in transformer_layers_per_block]
+        if args.old_style_controlnet:
+            down_block_types = ["CrossAttnDownBlock2D"] * len(transformer_layers_per_block)
+        else:
+            down_block_types = ["DownBlock2D" if l == 0 else "CrossAttnDownBlock2D" for l in transformer_layers_per_block]
         controlnet = ControlNetModel.from_config(
             pre_controlnet.config,
             down_block_types=down_block_types,
