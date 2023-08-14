@@ -1023,6 +1023,7 @@ def main(args):
         transformer_layers_per_block = [int(x) for x in args.transformer_layers_per_block.split(",")]
         if args.old_style_controlnet:
             down_block_types = ["CrossAttnDownBlock2D"] * len(transformer_layers_per_block)
+            down_block_types[0] = "DownBlock2D"
         else:
             down_block_types = ["DownBlock2D" if l == 0 else "CrossAttnDownBlock2D" for l in transformer_layers_per_block]
         controlnet = ControlNetModel.from_config(
