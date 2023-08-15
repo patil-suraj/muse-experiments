@@ -127,15 +127,15 @@ def tarfile_to_samples_nothrow(src, handler=wds.warn_and_continue):
 
 
 def control_transform(image):
-    low_thresholds = list(range(50, 400, 50))
-    high_thresholds = list(range(100, 400, 50))
-    low_threshold = random.choice(low_thresholds)
-    high_threshold = random.choice(high_thresholds)
+    # low_thresholds = list(range(50, 400, 50))
+    # high_thresholds = list(range(100, 400, 50))
+    # low_threshold = random.choice(low_thresholds)
+    # high_threshold = random.choice(high_thresholds)
 
     image = np.array(image)
 
-    # low_threshold = 100
-    # high_threshold = 200
+    low_threshold = 100
+    high_threshold = 200
 
     image = cv2.Canny(image, low_threshold, high_threshold)
     image = image[:, :, None]
