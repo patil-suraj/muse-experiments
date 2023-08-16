@@ -451,7 +451,7 @@ def log_validation(vae, unet, controlnet, args, accelerator, weight_dtype, step)
     #     raise ValueError(
     #         "number of `args.validation_image` and `args.validation_prompt` should be checked in `parse_args`"
     #     )
-    validation_images = [os.path.join(args.validation_image, f"{i}.png") for i in len(args.validation_prompt)]
+    validation_images = [os.path.join(args.validation_image, f"{i}.png") for i in range(len(args.validation_prompt))]
     validation_prompts = args.validation_prompt
 
     image_logs = []
