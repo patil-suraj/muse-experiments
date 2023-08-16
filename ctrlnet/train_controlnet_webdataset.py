@@ -437,20 +437,22 @@ def log_validation(vae, unet, controlnet, args, accelerator, weight_dtype, step)
     else:
         generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
 
-    if len(args.validation_image) == len(args.validation_prompt):
-        # validation_images = args.validation_image
-        validation_images = [os.path.join(args.validation_image, f"{i}.png") for i in len(args.validation_prompt)]
-        validation_prompts = args.validation_prompt
-    elif len(args.validation_image) == 1:
-        validation_images = args.validation_image * len(args.validation_prompt)
-        validation_prompts = args.validation_prompt
-    elif len(args.validation_prompt) == 1:
-        validation_images = args.validation_image
-        validation_prompts = args.validation_prompt * len(args.validation_image)
-    else:
-        raise ValueError(
-            "number of `args.validation_image` and `args.validation_prompt` should be checked in `parse_args`"
-        )
+    # if len(args.validation_image) == len(args.validation_prompt):
+    #     # validation_images = args.validation_image
+    #     validation_images = [os.path.join(args.validation_image, f"{i}.png") for i in len(args.validation_prompt)]
+    #     validation_prompts = args.validation_prompt
+    # elif len(args.validation_image) == 1:
+    #     validation_images = args.validation_image * len(args.validation_prompt)
+    #     validation_prompts = args.validation_prompt
+    # elif len(args.validation_prompt) == 1:
+    #     validation_images = args.validation_image
+    #     validation_prompts = args.validation_prompt * len(args.validation_image)
+    # else:
+    #     raise ValueError(
+    #         "number of `args.validation_image` and `args.validation_prompt` should be checked in `parse_args`"
+    #     )
+    validation_images = [os.path.join(args.validation_image, f"{i}.png") for i in len(args.validation_prompt)]
+    validation_prompts = args.validation_prompt
 
     image_logs = []
 
