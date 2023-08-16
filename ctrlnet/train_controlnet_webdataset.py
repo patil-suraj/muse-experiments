@@ -1108,7 +1108,7 @@ def main(args):
     if args.control_type == "depth":
         # feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
         # depth_model = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas")
-        torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
+        # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
         depth_model = torch.hub.load("isl-org/ZoeDepth", "ZoeD_NK", pretrained=True).eval()
         depth_model.requires_grad_(False)
     else:
