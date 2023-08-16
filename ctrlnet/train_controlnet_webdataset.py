@@ -42,6 +42,8 @@ from torchvision.transforms import ToPILImage
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
 import webdataset as wds
+import matplotlib
+import matplotlib.cm
 
 import diffusers
 from diffusers import (
@@ -81,6 +83,66 @@ if is_wandb_available():
 check_min_version("0.18.0.dev0")
 
 logger = get_logger(__name__)
+
+import matplotlib
+import matplotlib.cm
+import numpy as np
+import torch
+
+def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, invalid_mask=None, background_color=(128, 128, 128, 255), gamma_corrected=False, value_transform=None):
+    """Converts a depth map to a color image.
+    Args:
+        value (torch.Tensor, numpy.ndarry): Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
+        vmin (float, optional): vmin-valued entries are mapped to start color of cmap. If None, value.min() is used. Defaults to None.
+        vmax (float, optional):  vmax-valued entries are mapped to end color of cmap. If None, value.max() is used. Defaults to None.
+        cmap (str, optional): matplotlib colormap to use. Defaults to 'magma_r'.
+        invalid_val (int, optional): Specifies value of invalid pixels that should be colored as 'background_color'. Defaults to -99.
+        invalid_mask (numpy.ndarray, optional): Boolean mask for invalid regions. Defaults to None.
+        background_color (tuple[int], optional): 4-tuple RGB color to give to invalid pixels. Defaults to (128, 128, 128, 255).
+        gamma_corrected (bool, optional): Apply gamma correction to colored image. Defaults to False.
+        value_transform (Callable, optional): Apply transform function to valid pixels before coloring. Defaults to None.
+    Returns:
+        numpy.ndarray, dtype - uint8: Colored depth map. Shape: (H, W, 4)
+    """
+    if isinstance(value, torch.Tensor):
+        value = value.detach().cpu().numpy()
+
+    value = value.squeeze()
+    if invalid_mask is None:
+        invalid_mask = value == invalid_val
+    mask = np.logical_not(invalid_mask)
+
+    # normalize
+    vmin = np.percentile(value[mask],2) if vmin is None else vmin
+    vmax = np.percentile(value[mask],85) if vmax is None else vmax
+    if vmin != vmax:
+        value = (value - vmin) / (vmax - vmin)  # vmin..vmax
+    else:
+        # Avoid 0-division
+        value = value * 0.
+
+    # squeeze last dim if it exists
+    # grey out the invalid values
+
+    value[invalid_mask] = np.nan
+    cmapper = matplotlib.cm.get_cmap(cmap)
+    if value_transform:
+        value = value_transform(value)
+        # value = value / value.max()
+    value = cmapper(value, bytes=True)  # (nxmx4)
+
+    # img = value[:, :, :]
+    img = value[...]
+    img[invalid_mask] = background_color
+
+    # gamma correction
+    img = img / 255
+    img = np.power(img, 2.2)
+    img = img * 255
+    img = img.astype(np.uint8)
+    img = Image.fromarray(img).convert('L')
+    img = np.array(img).astype(np.float32) / 255
+    return img
 
 
 def filter_keys(key_set):
@@ -196,7 +258,8 @@ def depth_image_transform(example, feature_extractor, resolution=1024):
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = transforms.functional.crop(image, c_top, c_left, resolution, resolution)
     
-    control_image = feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze(0)
+    # control_image = feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze(0)
+    control_image = transforms.ToTensor()(image)
     
     image = transforms.ToTensor()(image)
     image = transforms.Normalize([0.5], [0.5])(image)
@@ -375,7 +438,8 @@ def log_validation(vae, unet, controlnet, args, accelerator, weight_dtype, step)
         generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
 
     if len(args.validation_image) == len(args.validation_prompt):
-        validation_images = args.validation_image
+        # validation_images = args.validation_image
+        validation_images = [os.path.join(args.validation_image, f"{i}.png") for i in len(args.validation_prompt)]
         validation_prompts = args.validation_prompt
     elif len(args.validation_image) == 1:
         validation_images = args.validation_image * len(args.validation_prompt)
@@ -801,7 +865,7 @@ def parse_args(input_args=None):
         "--validation_image",
         type=str,
         default=None,
-        nargs="+",
+        # nargs="+",
         help=(
             "A set of paths to the controlnet conditioning image be evaluated every `--validation_steps`"
             " and logged to `--report_to`. Provide either a matching number of `--validation_prompt`s, a"
@@ -1042,8 +1106,10 @@ def main(args):
         controlnet = pre_controlnet
     
     if args.control_type == "depth":
-        feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
-        depth_model = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas")
+        # feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
+        # depth_model = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas")
+        torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
+        depth_model = torch.hub.load("isl-org/ZoeDepth", "ZoeD_NK", pretrained=True).eval()
         depth_model.requires_grad_(False)
     else:
         feature_extractor = None
@@ -1164,7 +1230,8 @@ def main(args):
     text_encoder_one.to(accelerator.device, dtype=weight_dtype)
     text_encoder_two.to(accelerator.device, dtype=weight_dtype)
     if args.control_type == "depth":
-        depth_model.to(accelerator.device, dtype=weight_dtype)
+        # depth_model.to(accelerator.device, dtype=weight_dtype)
+        depth_model.to(accelerator.device)
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
@@ -1356,19 +1423,26 @@ def main(args):
                     latents = latents.to(weight_dtype)
                 
                 if args.control_type == "depth":
-                    control_image = control_image.to(weight_dtype)
-                    with torch.autocast("cuda"):
-                        depth_map = depth_model(control_image).predicted_depth
-                    depth_map = torch.nn.functional.interpolate(
-                        depth_map.unsqueeze(1),
-                        size=image.shape[2:],
-                        mode="bicubic",
-                        align_corners=False,
-                    )
-                    depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
-                    depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
-                    depth_map = (depth_map - depth_min) / (depth_max - depth_min)
-                    control_image = (depth_map * 255.).to(torch.uint8).float() / 255. # hack to match inference
+                    # control_image = control_image.to(weight_dtype)
+                    # with torch.autocast("cuda"):
+                    #     depth_map = depth_model(control_image).predicted_depth
+                    # depth_map = torch.nn.functional.interpolate(
+                    #     depth_map.unsqueeze(1),
+                    #     size=image.shape[2:],
+                    #     mode="bicubic",
+                    #     align_corners=False,
+                    # )
+                    # depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
+                    # depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
+                    # depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+                    # control_image = (depth_map * 255.).to(torch.uint8).float() / 255. # hack to match inference
+                    # control_image = torch.cat([control_image] * 3, dim=1)
+                    with torch.autocast("cuda", enabled=True):
+                        depth_map = depth_model.infer(image)
+                    # apply the colorize function to each example in the batch and concatenate
+                    control_image = [torch.tensor(colorize(depth_map[i], cmap="gray_r", gamma_corrected=True)) for i in range(depth_map.shape[0])]
+                    control_image = torch.stack(control_image, dim=0).to(accelerator.device, dtype=weight_dtype)
+                    control_image = control_image.unsqueeze(1)
                     control_image = torch.cat([control_image] * 3, dim=1)
 
                 # Sample noise that we'll add to the latents
