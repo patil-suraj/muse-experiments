@@ -940,17 +940,17 @@ def parse_args(input_args=None):
     if args.validation_prompt is None and args.validation_image is not None:
         raise ValueError("`--validation_prompt` must be set if `--validation_image` is set")
 
-    if (
-        args.validation_image is not None
-        and args.validation_prompt is not None
-        and len(args.validation_image) != 1
-        and len(args.validation_prompt) != 1
-        and len(args.validation_image) != len(args.validation_prompt)
-    ):
-        raise ValueError(
-            "Must provide either 1 `--validation_image`, 1 `--validation_prompt`,"
-            " or the same number of `--validation_prompt`s and `--validation_image`s"
-        )
+    # if (
+    #     args.validation_image is not None
+    #     and args.validation_prompt is not None
+    #     and len(args.validation_image) != 1
+    #     and len(args.validation_prompt) != 1
+    #     and len(args.validation_image) != len(args.validation_prompt)
+    # ):
+    #     raise ValueError(
+    #         "Must provide either 1 `--validation_image`, 1 `--validation_prompt`,"
+    #         " or the same number of `--validation_prompt`s and `--validation_image`s"
+    #     )
 
     if args.resolution % 8 != 0:
         raise ValueError(
