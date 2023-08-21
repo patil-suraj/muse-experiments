@@ -113,7 +113,7 @@ training:
     batch_size: 128
     mixed_precision: "fp16"
     enable_tf32: True
-    use_ema: False
+    use_ema: True
     seed: 9345104
     max_train_steps: 1000000
     overfit_one_batch: False
@@ -127,4 +127,3 @@ training:
     use_soft_code_target: False
     use_stochastic_code: False
     soft_code_temp: 1.0
-    use_ema: True
