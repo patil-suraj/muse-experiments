@@ -114,6 +114,7 @@ training:
     mixed_precision: "fp16"
     enable_tf32: True
     use_ema: True
+    ema_decay: 0.9999
     seed: 9345104
     max_train_steps: 1000000
     overfit_one_batch: False
