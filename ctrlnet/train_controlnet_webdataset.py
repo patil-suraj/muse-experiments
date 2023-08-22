@@ -74,6 +74,8 @@ from webdataset.tariterators import (
 )
 import cv2
 
+from pix2pix_dataloader import get_dataloader
+
 MAX_SEQ_LENGTH = 77
 
 if is_wandb_available():
@@ -1280,23 +1282,32 @@ def main(args):
             sigma = sigma.unsqueeze(-1)
         return sigma
 
-    dataset = Text2ImageDataset(
-        train_shards_path_or_url=args.train_shards_path_or_url,
-        eval_shards_path_or_url=args.eval_shards_path_or_url,
-        num_train_examples=args.max_train_samples,
-        per_gpu_batch_size=args.train_batch_size,
-        global_batch_size=args.train_batch_size * accelerator.num_processes,
-        num_workers=args.dataloader_num_workers,
-        resolution=args.resolution,
-        center_crop=False,
-        random_flip=False,
-        shuffle_buffer_size=1000,
-        pin_memory=True,
-        persistent_workers=True,
-        control_type=args.control_type,
-        feature_extractor=feature_extractor,
-    )
-    train_dataloader = dataset.train_dataloader
+    if args.control_type == "pix2pix":
+        train_dataloader = get_dataloader(
+            train_shards_path_or_url=args.train_shards_path_or_url,
+            num_train_examples=args.max_train_samples,
+            per_gpu_batch_size=args.train_batch_size,
+            global_batch_size=args.train_batch_size * accelerator.num_processes,
+            num_workers=args.dataloader_num_workers,
+        )
+    else:
+        dataset = Text2ImageDataset(
+            train_shards_path_or_url=args.train_shards_path_or_url,
+            eval_shards_path_or_url=args.eval_shards_path_or_url,
+            num_train_examples=args.max_train_samples,
+            per_gpu_batch_size=args.train_batch_size,
+            global_batch_size=args.train_batch_size * accelerator.num_processes,
+            num_workers=args.dataloader_num_workers,
+            resolution=args.resolution,
+            center_crop=False,
+            random_flip=False,
+            shuffle_buffer_size=1000,
+            pin_memory=True,
+            persistent_workers=True,
+            control_type=args.control_type,
+            feature_extractor=feature_extractor,
+        )
+        train_dataloader = dataset.train_dataloader
 
     # Let's first compute all the embeddings so that we can free up the text encoders
     # from memory.
