@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=controlnet-pix2pix
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
 #SBATCH --gres=gpu:8
@@ -68,7 +68,7 @@ PROGRAM="train_controlnet_webdataset.py \
     --validation_prompt 'make the sky cloudy' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/scratch/sayak/instructpix2pix-clip-filtered-upscaled-corrected-wds/{00000..00521}.tar -' \
     --proportion_empty_prompts=0.1 \
-    --validation_steps=10 \
+    --validation_steps=500 \
     --train_batch_size=8 \
     --gradient_checkpointing \
     --use_8bit_adam \
