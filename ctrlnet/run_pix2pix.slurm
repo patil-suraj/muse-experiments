@@ -62,7 +62,7 @@ PROGRAM="train_controlnet_webdataset.py \
     --resolution=1024 \
     --learning_rate=1e-5 \
     --max_train_steps=50000 \
-    --max_train_samples=12000000 \
+    --max_train_samples=313010 \
     --dataloader_num_workers=8 \
     --validation_image='/admin/home/suraj/code/muse-experiments/pix2pix_images' \
     --validation_prompt 'make the sky cloudy' \
