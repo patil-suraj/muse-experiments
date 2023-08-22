@@ -43,7 +43,7 @@ def get_dataloader(train_shards_path_or_url, num_train_examples, per_gpu_batch_s
         return {
             "image": image,
             "control_image": control_image,
-            text: sample["text"],
+            "text": sample["text"],
             "orig_size": (1024., 1024.),
             "crop_coords": (0., 0.),
         }
