@@ -68,7 +68,7 @@ PROGRAM="train_controlnet_webdataset.py \
     --validation_prompt 'make the sky cloudy' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/scratch/sayak/instructpix2pix-clip-filtered-upscaled-corrected-wds/{00000..00521}.tar -' \
     --proportion_empty_prompts=0.1 \
-    --validation_steps=500 \
+    --validation_steps=10 \
     --train_batch_size=8 \
     --gradient_checkpointing \
     --use_8bit_adam \
