@@ -64,7 +64,7 @@ PROGRAM="train_controlnet_webdataset.py \
     --max_train_steps=50000 \
     --max_train_samples=12000000 \
     --dataloader_num_workers=8 \
-    --validation_image='/admin/home/suraj/code/muse-experiments/ctrlnet/zoe-depth-images' \
+    --validation_image='/admin/home/suraj/code/muse-experiments/pix2pix_images' \
     --validation_prompt 'make the sky cloudy' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/scratch/sayak/instructpix2pix-clip-filtered-upscaled-corrected-wds/{00000..00521}.tar -' \
     --proportion_empty_prompts=0.1 \
