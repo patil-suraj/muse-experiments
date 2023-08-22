@@ -38,7 +38,7 @@ def get_dataloader(train_shards_path_or_url, num_train_examples, per_gpu_batch_s
 
         image = transforms.ToTensor()(image)
         image = transforms.Normalize([0.5], [0.5])(image)
-        control_image = transforms.ToTensor()(image)
+        control_image = transforms.ToTensor()(control_image)
 
         return {
             "image": image,
