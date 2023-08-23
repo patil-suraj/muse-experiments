@@ -798,6 +798,12 @@ def parse_args(input_args=None):
             " Defaults to `canny`."
         ),
     )
+    parser.add_argument(
+        "--use_euler",
+        action="store_true",
+        default=False,
+        help="Whether or not to use Euler Scheduler.",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -813,17 +819,6 @@ def parse_args(input_args=None):
     if args.validation_prompt is None and args.validation_image is not None:
         raise ValueError("`--validation_prompt` must be set if `--validation_image` is set")
 
-    # if (
-    #     args.validation_image is not None
-    #     and args.validation_prompt is not None
-    #     and len(args.validation_image) != 1
-    #     and len(args.validation_prompt) != 1
-    #     and len(args.validation_image) != len(args.validation_prompt)
-    # ):
-    #     raise ValueError(
-    #         "Must provide either 1 `--validation_image`, 1 `--validation_prompt`,"
-    #         " or the same number of `--validation_prompt`s and `--validation_image`s"
-    #     )
 
     if args.resolution % 8 != 0:
         raise ValueError(
@@ -1320,13 +1315,18 @@ def main(args):
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-                sigmas = get_sigmas(timesteps, len(noisy_latents.shape), noisy_latents.dtype)
-                inp_noisy_latents = noisy_latents / ((sigmas**2 + 1) ** 0.5)
+                
+                if args.use_euler:
+                    sigmas = get_sigmas(timesteps, len(noisy_latents.shape), noisy_latents.dtype)
+                    inp_noisy_latents = noisy_latents / ((sigmas**2 + 1) ** 0.5)
+                else:
+                    inp_noisy_latents = noisy_latents
 
                 # ControlNet conditioning.
                 t2iadapter_image = control_image.to(dtype=weight_dtype)
                 down_block_res_samples = t2iadapter(t2iadapter_image)
-                down_block_res_samples = [sample / ((sigmas**2 + 1) ** 0.5) for sample in down_block_res_samples]
+                if args.use_euler:
+                    down_block_res_samples = [sample / ((sigmas**2 + 1) ** 0.5) for sample in down_block_res_samples]
 
                 # Predict the noise residual
                 prompt_embeds = encoded_text.pop("prompt_embeds")
@@ -1340,22 +1340,26 @@ def main(args):
                     ],
                 ).sample
 
-                model_pred = model_pred * (-sigmas) + noisy_latents
-                weighing = sigmas**-2.0
+                if args.use_euler:
+                    model_pred = model_pred * (-sigmas) + noisy_latents
+                    weighing = sigmas**-2.0
 
 
                 # Get the target for loss depending on the prediction type
                 if noise_scheduler.config.prediction_type == "epsilon":
-                    target = latents
+                    target = latents if args.use_euler else noise
                 elif noise_scheduler.config.prediction_type == "v_prediction":
                     target = noise_scheduler.get_velocity(latents, noise, timesteps)
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-                # loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
-                loss = torch.mean(
-                    (weighing.float() * (model_pred.float() - target.float()) ** 2).reshape(target.shape[0], -1), 1
-                )
-                loss = loss.mean()
+                
+                if args.use_euler:
+                    loss = torch.mean(
+                        (weighing.float() * (model_pred.float() - target.float()) ** 2).reshape(target.shape[0], -1), 1
+                    )
+                    loss = loss.mean()
+                else:
+                    loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
