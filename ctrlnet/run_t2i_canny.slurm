@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=t2i-canny
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
 #SBATCH --gres=gpu:8
@@ -68,7 +68,7 @@ PROGRAM="train_t2i_adapter.py \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.0 \
     --validation_steps=500 \
-    --train_batch_size=12 \
+    --train_batch_size=8 \
     --gradient_checkpointing \
     --use_8bit_adam \
     --enable_xformers_memory_efficient_attention \
