@@ -1326,6 +1326,7 @@ def main(args):
                 # ControlNet conditioning.
                 t2iadapter_image = control_image.to(dtype=weight_dtype)
                 down_block_res_samples = t2iadapter(t2iadapter_image)
+                down_block_res_samples = [sample / ((sigmas**2 + 1) ** 0.5) for sample in down_block_res_samples]
 
                 # Predict the noise residual
                 prompt_embeds = encoded_text.pop("prompt_embeds")
