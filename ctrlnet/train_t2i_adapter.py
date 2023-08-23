@@ -190,13 +190,13 @@ def tarfile_to_samples_nothrow(src, handler=wds.warn_and_continue):
     return samples
 
 
-def control_transform(image):
-    thresholds = list(range(50, 400, 50))
-    low_threshold = random.choice(thresholds)
-    high_threshold = random.choice(thresholds)
+def control_transform(image, low_threshold=100, high_threshold=200, shift_range=50):
+    low_threshold = low_threshold + random.randint(-shift_range, shift_range)
+    high_threshold = high_threshold + random.randint(-shift_range, shift_range)
 
-    image = np.array(image)
+    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     image = cv2.Canny(image, low_threshold, high_threshold)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     control_image = Image.fromarray(image).convert("L")
     return control_image
 
@@ -213,7 +213,6 @@ def canny_image_transform(example, resolution=1024):
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
     control_image = TF.to_tensor(control_image)
-    control_image = TF.normalize(control_image, [0.5], [0.5])
     
     example["image"] = image
     example["control_image"] = control_image
