@@ -803,6 +803,12 @@ def parse_args(input_args=None):
         default=False,
         help="Whether or not to use Euler Scheduler.",
     )
+    parser.add_argument(
+        "--scale_down_block_res_samples",
+        action="store_true",
+        default=False,
+        help="Whether or not to scale down the number of samples in the residual block.",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -1339,7 +1345,7 @@ def main(args):
                     ],
                 ).sample
 
-                if args.use_euler:
+                if args.use_euler and args.scale_down_block_res_samples:
                     model_pred = model_pred * (-sigmas) + noisy_latents
                     weighing = sigmas**-2.0
 
