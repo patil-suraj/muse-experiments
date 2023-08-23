@@ -1330,7 +1330,7 @@ def main(args):
                 # ControlNet conditioning.
                 t2iadapter_image = control_image.to(dtype=weight_dtype)
                 down_block_res_samples = t2iadapter(t2iadapter_image)
-                if args.use_euler:
+                if args.use_euler and args.scale_down_block_res_samples:
                     down_block_res_samples = [sample / ((sigmas**2 + 1) ** 0.5) for sample in down_block_res_samples]
 
                 # Predict the noise residual
@@ -1345,7 +1345,7 @@ def main(args):
                     ],
                 ).sample
 
-                if args.use_euler and args.scale_down_block_res_samples:
+                if args.use_euler:
                     model_pred = model_pred * (-sigmas) + noisy_latents
                     weighing = sigmas**-2.0
 
