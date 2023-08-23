@@ -199,34 +199,6 @@ def control_transform(image):
     control_image = Image.fromarray(image)
     return control_image
 
-
-class ImageNetTransform:
-    def __init__(self, resolution, center_crop=True, random_flip=False):
-        self.train_transform = transforms.Compose(
-            [
-                transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.RandomCrop(resolution),
-                transforms.ToTensor(),
-                transforms.Normalize([0.5], [0.5]),
-            ]
-        )
-        self.train_control_transform = transforms.Compose(
-            [
-                control_transform,
-                transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.RandomCrop(resolution),
-                transforms.ToTensor(),
-            ]
-        )
-        self.eval_transform = transforms.Compose(
-            [
-                transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.RandomCrop(resolution),
-                transforms.ToTensor(),
-            ]
-        )
-
-
 def canny_image_transform(example, resolution=1024):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
@@ -292,7 +264,6 @@ class Text2ImageDataset:
     def __init__(
         self,
         train_shards_path_or_url: Union[str, List[str]],
-        eval_shards_path_or_url: Union[str, List[str]],
         num_train_examples: int,
         per_gpu_batch_size: int,
         global_batch_size: int,
@@ -306,17 +277,10 @@ class Text2ImageDataset:
         control_type: str = "canny",
         feature_extractor: Optional[DPTFeatureExtractor] = None,
     ):
-        transform = ImageNetTransform(resolution, center_crop, random_flip)
-
         if not isinstance(train_shards_path_or_url, str):
             train_shards_path_or_url = [list(braceexpand(urls)) for urls in train_shards_path_or_url]
             # flatten list using itertools
             train_shards_path_or_url = list(itertools.chain.from_iterable(train_shards_path_or_url))
-
-        if not isinstance(eval_shards_path_or_url, str):
-            eval_shards_path_or_url = [list(braceexpand(urls)) for urls in eval_shards_path_or_url]
-            # flatten list using itertools
-            eval_shards_path_or_url = list(itertools.chain.from_iterable(eval_shards_path_or_url))
 
         def get_orig_size(json):
             return (int(json.get("original_width", 0.0)), int(json.get("original_height", 0.0)))
@@ -363,24 +327,6 @@ class Text2ImageDataset:
         self._train_dataloader.num_batches = num_batches
         self._train_dataloader.num_samples = num_samples
 
-        # Create eval dataset and loader
-        pipeline = [
-            wds.SimpleShardList(eval_shards_path_or_url),
-            wds.split_by_worker,
-            wds.tarfile_to_samples(handler=wds.ignore_and_continue),
-            *processing_pipeline,
-            wds.batched(per_gpu_batch_size, partial=False, collation_fn=default_collate),
-        ]
-        self._eval_dataset = wds.DataPipeline(*pipeline)
-        self._eval_dataloader = wds.WebLoader(
-            self._eval_dataset,
-            batch_size=None,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            persistent_workers=persistent_workers,
-        )
-
     @property
     def train_dataset(self):
         return self._train_dataset
@@ -388,14 +334,6 @@ class Text2ImageDataset:
     @property
     def train_dataloader(self):
         return self._train_dataloader
-
-    @property
-    def eval_dataset(self):
-        return self._eval_dataset
-
-    @property
-    def eval_dataloader(self):
-        return self._eval_dataloader
 
 
 def image_grid(imgs, rows, cols):
@@ -1200,7 +1138,6 @@ def main(args):
     
     dataset = Text2ImageDataset(
         train_shards_path_or_url=args.train_shards_path_or_url,
-        eval_shards_path_or_url=args.eval_shards_path_or_url,
         num_train_examples=args.max_train_samples,
         per_gpu_batch_size=args.train_batch_size,
         global_batch_size=args.train_batch_size * accelerator.num_processes,
