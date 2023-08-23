@@ -142,8 +142,6 @@ def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, inval
     img = img.astype(np.uint8)
     img = Image.fromarray(img).convert('L')
     img = np.array(img).astype(np.float32) / 255
-    # normalize
-    img = 2 * img - 1
     return img
 
 
