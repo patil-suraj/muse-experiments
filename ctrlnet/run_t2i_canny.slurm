@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:8
 #SBATCH --exclusive
 #SBATCH --partition=production-cluster
 #SBATCH --output=/admin/home/suraj/logs/maskgit-imagenet/%x-%j.out
@@ -26,7 +26,7 @@ touch $LOG_PATH
 pushd $REPO
 
 
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 NNODES=$SLURM_NNODES
 NUM_GPUS=$((GPUS_PER_NODE*SLURM_NNODES))
 
@@ -67,8 +67,8 @@ PROGRAM="train_t2i_adapter.py \
     --validation_prompt 'beautiful room' 'two paradise birds' 'a snowy house behind a forest' 'a couple watching a romantic sunset' 'boats in the Amazonas' 'a beautiful face of a woman' 'a skater in Brooklyn' 'a tornado in Iowa' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.0 \
-    --validation_steps=10 \
-    --train_batch_size=8 \
+    --validation_steps=500 \
+    --train_batch_size=16 \
     --gradient_checkpointing \
     --use_8bit_adam \
     --enable_xformers_memory_efficient_attention \
