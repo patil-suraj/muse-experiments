@@ -1021,7 +1021,6 @@ def main(args):
         channels=(320, 640, 1280, 1280),
         num_res_blocks= 2,
         downscale_factor= 16,
-        adapter_type= "full_adapter",
         adapter_type="full_adapter_xl"
     )
     
