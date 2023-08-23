@@ -67,7 +67,7 @@ PROGRAM="train_t2i_adapter.py \
     --validation_prompt 'beautiful room' 'two paradise birds' 'a snowy house behind a forest' 'a couple watching a romantic sunset' 'boats in the Amazonas' 'a beautiful face of a woman' 'a skater in Brooklyn' 'a tornado in Iowa' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.0 \
-    --validation_steps=500 \
+    --validation_steps=10 \
     --train_batch_size=8 \
     --gradient_checkpointing \
     --use_8bit_adam \
