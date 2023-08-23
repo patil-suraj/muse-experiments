@@ -195,8 +195,7 @@ def control_transform(image):
 
     image = np.array(image)
     image = cv2.Canny(image, low_threshold, high_threshold)
-    image = image[:, :, None]
-    control_image = Image.fromarray(image)
+    control_image = Image.fromarray(image).convert("L")
     return control_image
 
 def canny_image_transform(example, resolution=1024):
