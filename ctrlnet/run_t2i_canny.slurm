@@ -68,7 +68,7 @@ PROGRAM="train_t2i_adapter.py \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.0 \
     --validation_steps=500 \
-    --train_batch_size=16 \
+    --train_batch_size=12 \
     --gradient_checkpointing \
     --use_8bit_adam \
     --enable_xformers_memory_efficient_attention \
