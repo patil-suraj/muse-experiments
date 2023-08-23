@@ -1086,7 +1086,6 @@ def main(args):
             raise ValueError("xformers is not available. Make sure it is installed correctly")
 
     if args.gradient_checkpointing:
-        t2iadapter.enable_gradient_checkpointing()
         unet.enable_gradient_checkpointing()
 
     # Check that all trainable models are in full precision
