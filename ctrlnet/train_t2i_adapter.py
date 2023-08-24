@@ -979,8 +979,8 @@ def main(args):
     t2iadapter = T2IAdapter(
         in_channels=args.adapter_in_channels,
         channels=(320, 640, 1280, 1280),
-        num_res_blocks= 2,
-        downscale_factor= 16,
+        num_res_blocks=2,
+        downscale_factor=16,
         adapter_type="full_adapter_xl"
     )
     
@@ -1026,10 +1026,10 @@ def main(args):
         accelerator.register_load_state_pre_hook(load_model_hook)
 
     vae.requires_grad_(False)
-    # unet.requires_grad_(False)
     text_encoder_one.requires_grad_(False)
     text_encoder_two.requires_grad_(False)
     t2iadapter.train()
+    unet.train()
 
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
