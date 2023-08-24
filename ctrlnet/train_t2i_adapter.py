@@ -89,7 +89,7 @@ import matplotlib.cm
 import numpy as np
 import torch
 
-def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, invalid_mask=None, background_color=(128, 128, 128, 255), gamma_corrected=False, value_transform=None):
+def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, invalid_mask=None, background_color=(128, 128, 128, 255), value_transform=None, num_channels=1):
     """Converts a depth map to a color image.
     Args:
         value (torch.Tensor, numpy.ndarry): Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
@@ -140,7 +140,11 @@ def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, inval
     img = np.power(img, 2.2)
     img = img * 255
     img = img.astype(np.uint8)
-    img = Image.fromarray(img).convert('L')
+    img = Image.fromarray(img)
+    if num_channels == 1:
+        img = img.convert("L")
+    else:
+        img = img.convert("RGB")
     img = np.array(img).astype(np.float32) / 255
     return img
 
@@ -188,17 +192,19 @@ def tarfile_to_samples_nothrow(src, handler=wds.warn_and_continue):
     return samples
 
 
-def control_transform(image, low_threshold=100, high_threshold=200, shift_range=50):
+def control_transform(image, low_threshold=100, high_threshold=200, shift_range=50, num_channels=1):
     low_threshold = low_threshold + random.randint(-shift_range, shift_range)
     high_threshold = high_threshold + random.randint(-shift_range, shift_range)
 
     image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     image = cv2.Canny(image, low_threshold, high_threshold)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    control_image = Image.fromarray(image).convert("L")
+    control_image = Image.fromarray(image)
+    if num_channels == 1:
+        control_image = control_image.convert("L")
     return control_image
 
-def canny_image_transform(example, resolution=1024):
+def canny_image_transform(example, resolution=1024, num_channels=1):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
     
@@ -206,7 +212,7 @@ def canny_image_transform(example, resolution=1024):
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = TF.crop(image, c_top, c_left, resolution, resolution)
     
-    control_image = control_transform(image)
+    control_image = control_transform(image, num_channels=num_channels)
     
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
@@ -274,6 +280,7 @@ class Text2ImageDataset:
         persistent_workers: bool = False,
         control_type: str = "canny",
         feature_extractor: Optional[DPTFeatureExtractor] = None,
+        num_channels: int = 1,
     ):
         if not isinstance(train_shards_path_or_url, str):
             train_shards_path_or_url = [list(braceexpand(urls)) for urls in train_shards_path_or_url]
@@ -284,7 +291,7 @@ class Text2ImageDataset:
             return (int(json.get("original_width", 0.0)), int(json.get("original_height", 0.0)))
 
         if control_type == "canny":
-            image_transform = functools.partial(canny_image_transform, resolution=resolution)
+            image_transform = functools.partial(canny_image_transform, resolution=resolution, num_channels=num_channels)
         elif control_type == "depth":
             image_transform = functools.partial(depth_image_transform, feature_extractor=feature_extractor, resolution=resolution)
 
@@ -375,7 +382,11 @@ def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step):
     image_logs = []
 
     for validation_prompt, validation_image in zip(validation_prompts, validation_images):
-        validation_image = Image.open(validation_image).convert("L")
+        validation_image = Image.open(validation_image)
+        if args.adapter_in_channels == 1:
+            validation_image = validation_image.convert("L")
+        else:
+            validation_image = validation_image.convert("RGB")
         validation_image = validation_image.resize((args.resolution, args.resolution))
 
         images = []
@@ -813,6 +824,12 @@ def parse_args(input_args=None):
         default=False,
         help="Whether or not to use non-uniform timesteps.",
     )
+    parser.add_argument(
+        "--adapter_in_channels",
+        type=int,
+        default=1,
+        help="Number of channels of the adapter input.",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -960,7 +977,7 @@ def main(args):
 
     logger.info("Initializing t2iadapter weights from unet")
     t2iadapter = T2IAdapter(
-        in_channels=1,
+        in_channels=args.adapter_in_channels,
         channels=(320, 640, 1280, 1280),
         num_res_blocks= 2,
         downscale_factor= 16,
@@ -1155,6 +1172,7 @@ def main(args):
         persistent_workers=True,
         control_type=args.control_type,
         feature_extractor=feature_extractor,
+        num_channels=args.adapter_in_channels,
     )
     train_dataloader = dataset.train_dataloader
 
@@ -1303,9 +1321,10 @@ def main(args):
                     with torch.autocast("cuda", enabled=True):
                         depth_map = depth_model.infer(image)
                     # apply the colorize function to each example in the batch and concatenate
-                    control_image = [torch.tensor(colorize(depth_map[i], cmap="gray_r", gamma_corrected=True)) for i in range(depth_map.shape[0])]
+                    control_image = [torch.tensor(colorize(depth_map[i], cmap="gray_r", num_channels=args.adapter_in_channels)) for i in range(depth_map.shape[0])]
                     control_image = torch.stack(control_image, dim=0).to(accelerator.device, dtype=weight_dtype)
-                    control_image = control_image.unsqueeze(1)
+                    if args.adapter_in_channels == 1:
+                        control_image = control_image.unsqueeze(1)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
