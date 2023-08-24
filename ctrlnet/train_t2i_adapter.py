@@ -143,9 +143,12 @@ def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, inval
     img = Image.fromarray(img)
     if num_channels == 1:
         img = img.convert("L")
+        img = np.array(img).astype(np.float32) / 255
     else:
         img = img.convert("RGB")
-    img = np.array(img).astype(np.float32) / 255
+        img = np.array(img).astype(np.float32) / 255
+        # channel first
+        img = img.transpose(2, 0, 1)
     return img
 
 
