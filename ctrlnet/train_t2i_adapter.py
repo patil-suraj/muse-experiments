@@ -140,15 +140,8 @@ def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, inval
     img = np.power(img, 2.2)
     img = img * 255
     img = img.astype(np.uint8)
-    img = Image.fromarray(img)
-    if num_channels == 1:
-        img = img.convert("L")
-        img = np.array(img).astype(np.float32) / 255
-    else:
-        img = img.convert("RGB")
-        img = np.array(img).astype(np.float32) / 255
-        # channel first
-        img = img.transpose(2, 0, 1)
+    img = Image.fromarray(img).convert('L')
+    img = np.array(img).astype(np.float32) / 255
     return img
 
 
@@ -1326,8 +1319,9 @@ def main(args):
                     # apply the colorize function to each example in the batch and concatenate
                     control_image = [torch.tensor(colorize(depth_map[i], cmap="gray_r", num_channels=args.adapter_in_channels)) for i in range(depth_map.shape[0])]
                     control_image = torch.stack(control_image, dim=0).to(accelerator.device, dtype=weight_dtype)
-                    if args.adapter_in_channels == 1:
-                        control_image = control_image.unsqueeze(1)
+                    control_image = control_image.unsqueeze(1)
+                    if args.adapter_in_channels == 3:
+                        control_image = torch.cat([control_image] * 3, dim=1)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
