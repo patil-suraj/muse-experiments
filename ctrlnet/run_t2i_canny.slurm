@@ -63,7 +63,7 @@ PROGRAM="train_t2i_adapter.py \
     --max_train_steps=50000 \
     --max_train_samples=12000000 \
     --dataloader_num_workers=8 \
-    --validation_image=/admin/home/suraj/code/muse-experiments/ctrlnet/zoe-depth-images  \
+    --validation_image=/admin/home/suraj/code/muse-experiments/ctrlnet/canny_images  \
     --validation_prompt 'beautiful room' 'two paradise birds' 'a snowy house behind a forest' 'a couple watching a romantic sunset' 'boats in the Amazonas' 'a beautiful face of a woman' 'a skater in Brooklyn' 'a tornado in Iowa' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.5 \
