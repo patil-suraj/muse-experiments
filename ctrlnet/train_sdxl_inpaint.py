@@ -58,7 +58,7 @@ from diffusers import (
     AutoencoderKL,
     DDPMScheduler,
     EulerDiscreteScheduler,
-    StableDiffusionXLAdapterPipeline,
+    StableDiffusionXLInpaintPipeline,
     UNet2DConditionModel,
 )
 from diffusers.optimization import get_scheduler
@@ -306,7 +306,7 @@ def log_validation(vae, unet, args, accelerator, weight_dtype, step):
     logger.info("Running validation... ")
 
     unet = accelerator.unwrap_model(unet)
-    pipeline = StableDiffusionXLAdapterPipeline.from_pretrained(
+    pipeline = StableDiffusionXLInpaintPipeline.from_pretrained(
         args.pretrained_model_name_or_path,
         vae=vae,
         unet=unet,
