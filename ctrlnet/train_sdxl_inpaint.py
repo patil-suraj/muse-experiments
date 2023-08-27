@@ -1317,19 +1317,19 @@ def main(args):
         unet = accelerator.unwrap_model(unet)
         unet.save_pretrained(args.output_dir)
 
-        if args.push_to_hub:
-            save_model_card(
-                repo_id,
-                image_logs=image_logs,
-                base_model=args.pretrained_model_name_or_path,
-                repo_folder=args.output_dir,
-            )
-            upload_folder(
-                repo_id=repo_id,
-                folder_path=args.output_dir,
-                commit_message="End of training",
-                ignore_patterns=["step_*", "epoch_*"],
-            )
+        # if args.push_to_hub:
+        #     save_model_card(
+        #         repo_id,
+        #         image_logs=image_logs,
+        #         base_model=args.pretrained_model_name_or_path,
+        #         repo_folder=args.output_dir,
+        #     )
+        #     upload_folder(
+        #         repo_id=repo_id,
+        #         folder_path=args.output_dir,
+        #         commit_message="End of training",
+        #         ignore_patterns=["step_*", "epoch_*"],
+        #     )
 
     accelerator.end_training()
 
