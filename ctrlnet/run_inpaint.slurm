@@ -64,7 +64,7 @@ PROGRAM="train_sdxl_inpaint.py \
     --max_train_samples=12000000 \
     --dataloader_num_workers=8 \
     --validation_image=/admin/home/suraj/code/muse-experiments/inpaint-images  \
-    --validation_prompt 'a man sitting on the bench' 'a tiger sitting on a bench' \
+    --validation_prompt 'a man sitting on the bench' 'a tiger sitting on a bench' 'a dog in a park' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.05 \
     --validation_steps=500 \

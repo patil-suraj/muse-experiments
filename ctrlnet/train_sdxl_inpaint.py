@@ -425,6 +425,7 @@ def log_validation(vae, unet, args, accelerator, weight_dtype, step):
                     prompt=prompt,
                     image=image,
                     mask_image=mask_image,
+                    num_inference_steps=30,
                     num_images_per_prompt=4,
                     strength=0.8,
                     generator=generator,
