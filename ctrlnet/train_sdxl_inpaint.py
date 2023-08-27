@@ -173,8 +173,8 @@ class OutpaintingMaskGenerator:
         res = hash(str_hash)%(2**32)
         return res
 
-    def __call__(self, img, iter_i=None, raw_image=None):
-        c, self.img_h, self.img_w = img.shape
+    def __call__(self, height, width, channles=3, iter_i=None, raw_image=None):
+        c, self.img_h, self.img_w = channles, height, width
         mask = np.zeros((self.img_h, self.img_w), np.float32)
         at_least_one_mask_applied = False
 
@@ -309,7 +309,7 @@ class Text2ImageDataset:
                 elif mask_type == "irregular":
                     mask = make_random_irregular_mask(resolution, resolution)
                 else:
-                    mask = OutpaintingMaskGenerator(max_padding_percent=0.5)(TF.to_tensor(example["image"]))
+                    mask = OutpaintingMaskGenerator(max_padding_percent=0.5)(resolution, resolution)
 
             # prepare mask
             mask = mask[None]
