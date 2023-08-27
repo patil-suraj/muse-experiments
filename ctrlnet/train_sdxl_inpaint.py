@@ -137,6 +137,82 @@ def make_random_irregular_mask(height, width, max_angle=4, max_len=60, max_width
     return mask
 
 
+class OutpaintingMaskGenerator:
+    def __init__(self, min_padding_percent:float=0.04, max_padding_percent:int=0.25, left_padding_prob:float=0.5, top_padding_prob:float=0.5, 
+                 right_padding_prob:float=0.5, bottom_padding_prob:float=0.5, is_fixed_randomness:bool=False):
+        """
+        is_fixed_randomness - get identical paddings for the same image if args are the same
+        """
+        self.min_padding_percent = min_padding_percent
+        self.max_padding_percent = max_padding_percent
+        self.probs = [left_padding_prob, top_padding_prob, right_padding_prob, bottom_padding_prob]
+        self.is_fixed_randomness = is_fixed_randomness
+
+        assert self.min_padding_percent <= self.max_padding_percent
+        assert self.max_padding_percent > 0
+        assert len([x for x in [self.min_padding_percent, self.max_padding_percent] if (x>=0 and x<=1)]) == 2, f"Padding percentage should be in [0,1]"
+        assert sum(self.probs) > 0, f"At least one of the padding probs should be greater than 0 - {self.probs}"
+        assert len([x for x in self.probs if (x >= 0) and (x <= 1)]) == 4, f"At least one of padding probs is not in [0,1] - {self.probs}"
+        if len([x for x in self.probs if x > 0]) == 1:
+            LOGGER.warning(f"Only one padding prob is greater than zero - {self.probs}. That means that the outpainting masks will be always on the same side")
+
+    def apply_padding(self, mask, coord):
+        mask[int(coord[0][0]*self.img_h):int(coord[1][0]*self.img_h),   
+             int(coord[0][1]*self.img_w):int(coord[1][1]*self.img_w)] = 1
+        return mask
+
+    def get_padding(self, size):
+        n1 = int(self.min_padding_percent*size)
+        n2 = int(self.max_padding_percent*size)
+        return self.rnd.randint(n1, n2) / size
+
+    @staticmethod
+    def _img2rs(img):
+        arr = np.ascontiguousarray(img.astype(np.uint8))
+        str_hash = hashlib.sha1(arr).hexdigest()
+        res = hash(str_hash)%(2**32)
+        return res
+
+    def __call__(self, img, iter_i=None, raw_image=None):
+        c, self.img_h, self.img_w = img.shape
+        mask = np.zeros((self.img_h, self.img_w), np.float32)
+        at_least_one_mask_applied = False
+
+        if self.is_fixed_randomness:
+            assert raw_image is not None, f"Cant calculate hash on raw_image=None"
+            rs = self._img2rs(raw_image)
+            self.rnd = np.random.RandomState(rs)
+        else:
+            self.rnd = np.random
+
+        coords = [[
+                   (0,0), 
+                   (1,self.get_padding(size=self.img_h))
+                  ],
+                  [
+                    (0,0),
+                    (self.get_padding(size=self.img_w),1)
+                  ],
+                  [
+                    (0,1-self.get_padding(size=self.img_h)),
+                    (1,1)
+                  ],    
+                  [
+                    (1-self.get_padding(size=self.img_w),0),
+                    (1,1)
+                  ]]
+
+        for pp, coord in zip(self.probs, coords):
+            if self.rnd.random() < pp:
+                at_least_one_mask_applied = True
+                mask = self.apply_padding(mask=mask, coord=coord)
+
+        if not at_least_one_mask_applied:
+            idx = self.rnd.choice(range(len(coords)), p=np.array(self.probs)/sum(self.probs))
+            mask = self.apply_padding(mask=mask, coord=coords[idx])
+        return mask
+
+
 def filter_keys(key_set):
     def _f(dictionary):
         return {k: v for k, v in dictionary.items() if k in key_set}
@@ -223,10 +299,17 @@ class Text2ImageDataset:
 
         def transform(example):
             # create mask
-            if random.random() < 0.5:
-                mask = make_random_rectangle_mask(resolution, resolution)
+            if random.random() < 0.25: # 25% of the time, use a full mask
+                mask = np.ones((resolution, resolution), np.float32)
             else:
-                mask = make_random_irregular_mask(resolution, resolution)
+                masking_types = ["rectangle", "irregular", "outpainting"]
+                mask_type = random.choice(masking_types)
+                if mask_type == "rectangle":
+                    mask = make_random_rectangle_mask(resolution, resolution)
+                elif mask_type == "irregular":
+                    mask = make_random_irregular_mask(resolution, resolution)
+                else:
+                    mask = OutpaintingMaskGenerator(max_padding_percent=0.5)(TF.to_tensor(example["image"]))
 
             # prepare mask
             mask = mask[None]
