@@ -986,6 +986,7 @@ def main(args):
         # the additional mask and masked image conditioning
         orig_in_channels = unet.config.in_channels
         unet.config.in_channels = 2 * orig_in_channels + 1  # 2 images + 1 mask
+        unet.register_to_config(in_channels=unet.config.in_channels)
         original_conv_in = unet.conv_in
         unet.conv_in = torch.nn.Conv2d(
             unet.config.in_channels, unet.config.block_out_channels[0], kernel_size=3, padding=(1, 1)
