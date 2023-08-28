@@ -69,7 +69,7 @@ PROGRAM="train_sdxl_inpaint.py \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.05 \
     --validation_steps=10 \
-    --train_batch_size=4 \
+    --train_batch_size=2 \
     --gradient_checkpointing \
     --enable_xformers_memory_efficient_attention \
     --gradient_accumulation_steps=1 \

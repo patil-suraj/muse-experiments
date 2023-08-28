@@ -1318,26 +1318,28 @@ def main(args):
                     latents = latents.to(weight_dtype)
                 
                 if args.control_type == "depth":
-                    # control_image = control_image.to(weight_dtype)
-                    # with torch.autocast("cuda"):
-                    #     depth_map = depth_model(control_image).predicted_depth
-                    # depth_map = torch.nn.functional.interpolate(
-                    #     depth_map.unsqueeze(1),
-                    #     size=image.shape[2:],
-                    #     mode="bicubic",
-                    #     align_corners=False,
-                    # )
-                    # depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
-                    # depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
-                    # depth_map = (depth_map - depth_min) / (depth_max - depth_min)
-                    # control_image = (depth_map * 255.).to(torch.uint8).float() / 255. # hack to match inference
-                    # control_image = torch.cat([control_image] * 3, dim=1)
-                    with torch.autocast("cuda", enabled=True):
-                        depth_map = depth_model.infer(image)
-                    # apply the colorize function to each example in the batch and concatenate
-                    control_image = [torch.tensor(colorize(depth_map[i], cmap="gray_r", num_channels=args.adapter_in_channels)) for i in range(depth_map.shape[0])]
-                    control_image = torch.stack(control_image, dim=0).to(accelerator.device, dtype=weight_dtype)
-                    control_image = control_image.unsqueeze(1)
+                    if args.depth_model_name_or_path == "zoe":
+                       with torch.autocast("cuda", enabled=True):
+                            depth_map = depth_model.infer(control_image)
+                        # apply the colorize function to each example in the batch and concatenate
+                        control_image = [torch.tensor(colorize(depth_map[i], cmap="gray_r", num_channels=args.adapter_in_channels)) for i in range(depth_map.shape[0])]
+                        control_image = torch.stack(control_image, dim=0).to(accelerator.device, dtype=weight_dtype)
+                        control_image = control_image.unsqueeze(1)
+                    else:
+                        control_image = control_image.to(weight_dtype)
+                        with torch.autocast("cuda"):
+                            depth_map = depth_model(control_image).predicted_depth
+                        depth_map = torch.nn.functional.interpolate(
+                            depth_map.unsqueeze(1),
+                            size=image.shape[2:],
+                            mode="bicubic",
+                            align_corners=False,
+                        )
+                        depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
+                        depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
+                        depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+                        control_image = (depth_map * 255.).to(torch.uint8).float() / 255. # hack to match inference
+                    
                     if args.adapter_in_channels == 3:
                         control_image = torch.cat([control_image] * 3, dim=1)
 
