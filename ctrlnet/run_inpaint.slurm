@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=sdxl-inpaint-ema
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:8
 #SBATCH --exclusive
 #SBATCH --partition=production-cluster
 #SBATCH --output=/admin/home/suraj/logs/maskgit-imagenet/%x-%j.out
@@ -26,7 +26,7 @@ touch $LOG_PATH
 pushd $REPO
 
 
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 NNODES=$SLURM_NNODES
 NUM_GPUS=$((GPUS_PER_NODE*SLURM_NNODES))
 
@@ -62,14 +62,14 @@ PROGRAM="train_sdxl_inpaint.py \
     --mixed_precision=fp16 \
     --resolution=1024 \
     --learning_rate=8e-6 \
-    --max_train_steps=10 \
+    --max_train_steps=50000 \
     --max_train_samples=3000000 \
     --dataloader_num_workers=8 \
     --validation_image=/admin/home/suraj/code/muse-experiments/inpaint-images  \
     --validation_prompt 'a man sitting on the bench' 'a tiger sitting on a bench' 'a dog in a park' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.05 \
-    --validation_steps=10 \
+    --validation_steps=500 \
     --train_batch_size=8 \
     --gradient_checkpointing \
     --enable_xformers_memory_efficient_attention \
