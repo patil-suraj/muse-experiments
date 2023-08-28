@@ -1014,8 +1014,8 @@ def main(args):
             depth_model = torch.hub.load("isl-org/ZoeDepth", "ZoeD_NK", pretrained=True).eval()
             feature_extractor = None
         else:
-            feature_extractor = DPTFeatureExtractor.from_pretrained(depth_model_name_or_path)
-            depth_model = DPTForDepthEstimation.from_pretrained(depth_model_name_or_path)
+            feature_extractor = DPTFeatureExtractor.from_pretrained(args.depth_model_name_or_path)
+            depth_model = DPTForDepthEstimation.from_pretrained(args.depth_model_name_or_path)
         depth_model.requires_grad_(False)
     else:
         feature_extractor = None
