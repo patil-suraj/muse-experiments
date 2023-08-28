@@ -227,8 +227,10 @@ def depth_image_transform(example, feature_extractor, resolution=1024):
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = transforms.functional.crop(image, c_top, c_left, resolution, resolution)
     
-    # control_image = feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze(0)
-    control_image = transforms.ToTensor()(image)
+    if feature_extractor is not None:
+        control_image = feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze(0)
+    else:
+        control_image = transforms.ToTensor()(image)
     
     image = transforms.ToTensor()(image)
     image = transforms.Normalize([0.5], [0.5])(image)
@@ -527,6 +529,15 @@ def parse_args(input_args=None):
         help=(
             "Revision of pretrained model identifier from huggingface.co/models. Trainable model components should be"
             " float32 precision."
+        ),
+    )
+    parser.add_argument(
+        "--depth_model_name_or_path",
+        type=str,
+        default=None,
+        required=False,
+        help=(
+            "Path to pretrained depth model or model identifier from huggingface.co/models."
         ),
     )
     parser.add_argument(
@@ -988,11 +999,13 @@ def main(args):
     )
     
     if args.control_type == "depth":
-        # feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
-        # depth_model = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas")
-        # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
-        feature_extractor = None
-        depth_model = torch.hub.load("isl-org/ZoeDepth", "ZoeD_NK", pretrained=True).eval()
+        if args.depth_model_name_or_path == "zoe":
+            # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
+            depth_model = torch.hub.load("isl-org/ZoeDepth", "ZoeD_NK", pretrained=True).eval()
+            feature_extractor = None
+        else:
+            feature_extractor = DPTFeatureExtractor.from_pretrained(depth_model_name_or_path)
+            depth_model = DPTForDepthEstimation.from_pretrained(depth_model_name_or_path)
         depth_model.requires_grad_(False)
     else:
         feature_extractor = None
@@ -1121,8 +1134,10 @@ def main(args):
     text_encoder_one.to(accelerator.device, dtype=weight_dtype)
     text_encoder_two.to(accelerator.device, dtype=weight_dtype)
     if args.control_type == "depth":
-        # depth_model.to(accelerator.device, dtype=weight_dtype)
-        depth_model.to(accelerator.device)
+        if args.depth_model_name_or_path == "zoe":
+            depth_model.to(accelerator.device)
+        else:
+            depth_model.to(accelerator.device, dtype=weight_dtype)
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
