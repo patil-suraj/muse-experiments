@@ -16,6 +16,7 @@
 import argparse
 import functools
 import gc
+import hashlib
 import itertools
 import json
 import logging
@@ -39,7 +40,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from braceexpand import braceexpand
-from huggingface_hub import create_repo, upload_folder
+from huggingface_hub import create_repo
 from packaging import version
 from PIL import Image
 from torch.utils.data import default_collate
@@ -62,6 +63,7 @@ from diffusers import (
     UNet2DConditionModel,
 )
 from diffusers.optimization import get_scheduler
+from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
@@ -138,8 +140,16 @@ def make_random_irregular_mask(height, width, max_angle=4, max_len=60, max_width
 
 
 class OutpaintingMaskGenerator:
-    def __init__(self, min_padding_percent:float=0.04, max_padding_percent:int=0.25, left_padding_prob:float=0.5, top_padding_prob:float=0.5, 
-                 right_padding_prob:float=0.5, bottom_padding_prob:float=0.5, is_fixed_randomness:bool=False):
+    def __init__(
+        self,
+        min_padding_percent: float = 0.04,
+        max_padding_percent: int = 0.25,
+        left_padding_prob: float = 0.5,
+        top_padding_prob: float = 0.5,
+        right_padding_prob: float = 0.5,
+        bottom_padding_prob: float = 0.5,
+        is_fixed_randomness: bool = False,
+    ):
         """
         is_fixed_randomness - get identical paddings for the same image if args are the same
         """
@@ -150,57 +160,51 @@ class OutpaintingMaskGenerator:
 
         assert self.min_padding_percent <= self.max_padding_percent
         assert self.max_padding_percent > 0
-        assert len([x for x in [self.min_padding_percent, self.max_padding_percent] if (x>=0 and x<=1)]) == 2, f"Padding percentage should be in [0,1]"
+        assert (
+            len([x for x in [self.min_padding_percent, self.max_padding_percent] if (x >= 0 and x <= 1)]) == 2
+        ), "Padding percentage should be in [0,1]"
         assert sum(self.probs) > 0, f"At least one of the padding probs should be greater than 0 - {self.probs}"
-        assert len([x for x in self.probs if (x >= 0) and (x <= 1)]) == 4, f"At least one of padding probs is not in [0,1] - {self.probs}"
-        if len([x for x in self.probs if x > 0]) == 1:
-            LOGGER.warning(f"Only one padding prob is greater than zero - {self.probs}. That means that the outpainting masks will be always on the same side")
+        assert (
+            len([x for x in self.probs if (x >= 0) and (x <= 1)]) == 4
+        ), f"At least one of padding probs is not in [0,1] - {self.probs}"
 
     def apply_padding(self, mask, coord):
-        mask[int(coord[0][0]*self.img_h):int(coord[1][0]*self.img_h),   
-             int(coord[0][1]*self.img_w):int(coord[1][1]*self.img_w)] = 1
+        mask[
+            int(coord[0][0] * self.img_h) : int(coord[1][0] * self.img_h),
+            int(coord[0][1] * self.img_w) : int(coord[1][1] * self.img_w),
+        ] = 1
         return mask
 
     def get_padding(self, size):
-        n1 = int(self.min_padding_percent*size)
-        n2 = int(self.max_padding_percent*size)
+        n1 = int(self.min_padding_percent * size)
+        n2 = int(self.max_padding_percent * size)
         return self.rnd.randint(n1, n2) / size
 
     @staticmethod
     def _img2rs(img):
         arr = np.ascontiguousarray(img.astype(np.uint8))
         str_hash = hashlib.sha1(arr).hexdigest()
-        res = hash(str_hash)%(2**32)
+        res = hash(str_hash) % (2**32)
         return res
 
     def __call__(self, height, width, channles=3, iter_i=None, raw_image=None):
-        c, self.img_h, self.img_w = channles, height, width
+        _, self.img_h, self.img_w = channles, height, width
         mask = np.zeros((self.img_h, self.img_w), np.float32)
         at_least_one_mask_applied = False
 
         if self.is_fixed_randomness:
-            assert raw_image is not None, f"Cant calculate hash on raw_image=None"
+            assert raw_image is not None, "Cant calculate hash on raw_image=None"
             rs = self._img2rs(raw_image)
             self.rnd = np.random.RandomState(rs)
         else:
             self.rnd = np.random
 
-        coords = [[
-                   (0,0), 
-                   (1,self.get_padding(size=self.img_h))
-                  ],
-                  [
-                    (0,0),
-                    (self.get_padding(size=self.img_w),1)
-                  ],
-                  [
-                    (0,1-self.get_padding(size=self.img_h)),
-                    (1,1)
-                  ],    
-                  [
-                    (1-self.get_padding(size=self.img_w),0),
-                    (1,1)
-                  ]]
+        coords = [
+            [(0, 0), (1, self.get_padding(size=self.img_h))],
+            [(0, 0), (self.get_padding(size=self.img_w), 1)],
+            [(0, 1 - self.get_padding(size=self.img_h)), (1, 1)],
+            [(1 - self.get_padding(size=self.img_w), 0), (1, 1)],
+        ]
 
         for pp, coord in zip(self.probs, coords):
             if self.rnd.random() < pp:
@@ -208,7 +212,7 @@ class OutpaintingMaskGenerator:
                 mask = self.apply_padding(mask=mask, coord=coord)
 
         if not at_least_one_mask_applied:
-            idx = self.rnd.choice(range(len(coords)), p=np.array(self.probs)/sum(self.probs))
+            idx = self.rnd.choice(range(len(coords)), p=np.array(self.probs) / sum(self.probs))
             mask = self.apply_padding(mask=mask, coord=coords[idx])
         return mask
 
@@ -299,7 +303,7 @@ class Text2ImageDataset:
 
         def transform(example):
             # create mask
-            if random.random() < 0.25: # 25% of the time, use a full mask
+            if random.random() < 0.25:  # 25% of the time, use a full mask
                 mask = np.ones((resolution, resolution), np.float32)
             else:
                 masking_types = ["rectangle", "irregular", "outpainting"]
@@ -545,6 +549,7 @@ def parse_args(input_args=None):
         default=None,
         help="Path to an improved VAE to stabilize training. For more details check out: https://github.com/huggingface/diffusers/pull/4038.",
     )
+    parser.add_argument("--use_ema", action="store_true", help="Whether to use EMA model.")
     parser.add_argument(
         "--revision",
         type=str,
@@ -676,6 +681,10 @@ def parse_args(input_args=None):
     parser.add_argument("--lr_power", type=float, default=1.0, help="Power factor of the polynomial scheduler.")
     parser.add_argument(
         "--use_8bit_adam", action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes."
+    )
+    parser.add_argument("--use_prodigy_optim", action="store_true", help="Whether or not to use Prodigy optimizer.")
+    parser.add_argument(
+        "--use_cosine_annealing_schedule", action="store_true", help="Whether or not to use cosine annealing schedule."
     )
     parser.add_argument(
         "--dataloader_num_workers",
@@ -903,6 +912,7 @@ def main(args):
         mixed_precision=args.mixed_precision,
         log_with=args.report_to,
         project_config=accelerator_project_config,
+        split_batches=True,  # It's important to set this to True when using webdataset to get the right number of steps for lr scheduling. If set to False, the number of steps will be devide by the number of processes assuming batches are multiplied by the number of processes
     )
 
     # Make one log on every process with the configuration for debugging.
@@ -929,7 +939,7 @@ def main(args):
             os.makedirs(args.output_dir, exist_ok=True)
 
         if args.push_to_hub:
-            repo_id = create_repo(
+            create_repo(
                 repo_id=args.hub_model_id or Path(args.output_dir).name,
                 exist_ok=True,
                 token=args.hub_token,
@@ -998,10 +1008,17 @@ def main(args):
         unet.conv_in.weight[:, orig_in_channels:, :, :] = 0
         del original_conv_in
 
+    # Create EMA for the unet.
+    if args.use_ema:
+        ema_unet = EMAModel(unet.parameters(), model_cls=UNet2DConditionModel, model_config=unet.config)
+
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
         def save_model_hook(models, weights, output_dir):
+            if args.use_ema:
+                ema_unet.save_pretrained(os.path.join(output_dir, "unet_ema"))
+
             for i, model in enumerate(models):
                 model.save_pretrained(os.path.join(output_dir, "unet"))
 
@@ -1009,6 +1026,12 @@ def main(args):
                 weights.pop()
 
         def load_model_hook(models, input_dir):
+            if args.use_ema:
+                load_model = EMAModel.from_pretrained(os.path.join(input_dir, "unet_ema"), UNet2DConditionModel)
+                ema_unet.load_state_dict(load_model.state_dict())
+                ema_unet.to(accelerator.device)
+                del load_model
+
             for i in range(len(models)):
                 # pop models so that they are not loaded again
                 model = models.pop()
@@ -1075,6 +1098,12 @@ def main(args):
             )
 
         optimizer_class = bnb.optim.AdamW8bit
+    elif args.use_prodigy_optim:
+        try:
+            from prodigyopt import Prodigy
+        except ImportError:
+            raise ImportError("To use Prodigy, please install the prodigyopt library: `pip install prodigyopt`.")
+        optimizer_class = Prodigy
     else:
         optimizer_class = torch.optim.AdamW
 
@@ -1103,7 +1132,6 @@ def main(args):
         vae.to(accelerator.device, dtype=torch.float32)
     text_encoder_one.to(accelerator.device, dtype=weight_dtype)
     text_encoder_two.to(accelerator.device, dtype=weight_dtype)
-    unet.to(accelerator.device)
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
@@ -1182,17 +1210,22 @@ def main(args):
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
 
-    lr_scheduler = get_scheduler(
-        args.lr_scheduler,
-        optimizer=optimizer,
-        num_warmup_steps=args.lr_warmup_steps * accelerator.num_processes,
-        num_training_steps=args.max_train_steps * accelerator.num_processes,
-        num_cycles=args.lr_num_cycles,
-        power=args.lr_power,
-    )
+    if args.use_cosine_annealing_schedule:  # to be used with Prodigy
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_train_steps)
+    else:
+        lr_scheduler = get_scheduler(
+            args.lr_scheduler,
+            optimizer=optimizer,
+            num_warmup_steps=args.lr_warmup_steps,
+            num_training_steps=args.max_train_steps,
+            num_cycles=args.lr_num_cycles,
+            power=args.lr_power,
+        )
 
     # Prepare everything with our `accelerator`.
     unet, optimizer, lr_scheduler = accelerator.prepare(unet, optimizer, lr_scheduler)
+    if args.use_ema:
+        ema_unet.to(accelerator.device)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(train_dataloader.num_batches / args.gradient_accumulation_steps)
@@ -1260,7 +1293,6 @@ def main(args):
         disable=not accelerator.is_local_main_process,
     )
 
-    image_logs = None
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(unet):
@@ -1357,6 +1389,8 @@ def main(args):
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
+                if args.use_ema:
+                    ema_unet.step(unet.parameters())
                 progress_bar.update(1)
                 global_step += 1
 
@@ -1387,7 +1421,16 @@ def main(args):
                         logger.info(f"Saved state to {save_path}")
 
                     if args.validation_prompt is not None and global_step % args.validation_steps == 0:
-                        image_logs = log_validation(vae, unet, args, accelerator, weight_dtype, global_step)
+                        # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
+                        if args.use_ema:
+                            ema_unet.store(unet.parameters())
+                            ema_unet.copy_to(unet.parameters())
+
+                        log_validation(vae, unet, args, accelerator, weight_dtype, global_step)
+
+                        # Switch back to the original UNet parameters.
+                        if args.use_ema:
+                            ema_unet.restore(unet.parameters())
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
@@ -1400,7 +1443,10 @@ def main(args):
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
         unet = accelerator.unwrap_model(unet)
-        unet.save_pretrained(args.output_dir)
+        unet.save_pretrained(os.path.join(args.output_dir, "unet"))
+        if args.use_ema:
+            ema_unet.copy_to(unet.parameters())
+            unet.save_pretrained(os.path.join(args.output_dir, "unet_ema"))
 
         # if args.push_to_hub:
         #     save_model_card(
