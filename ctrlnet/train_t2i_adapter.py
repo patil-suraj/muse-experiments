@@ -652,6 +652,12 @@ def parse_args(input_args=None):
         "--use_8bit_adam", action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes."
     )
     parser.add_argument(
+        "--use_prodigy_optim", action="store_true", help="Whether or not to use Prodigy optimizer."
+    )
+    parser.add_argument(
+        "--use_cosine_annealing_schedule", action="store_true", help="Whether or not to use cosine annealing schedule."
+    )
+    parser.add_argument(
         "--dataloader_num_workers",
         type=int,
         default=1,
@@ -899,6 +905,7 @@ def main(args):
         mixed_precision=args.mixed_precision,
         log_with=args.report_to,
         project_config=accelerator_project_config,
+        split_batches=True,  # It's important to set this to True when using webdataset to get the right number of steps for lr scheduling. If set to False, the number of steps will be devide by the number of processes assuming batches are multiplied by the number of processes
     )
 
     # Make one log on every process with the configuration for debugging.
@@ -1075,6 +1082,14 @@ def main(args):
             )
 
         optimizer_class = bnb.optim.AdamW8bit
+    elif args.use_prodigy_optim:
+        try:
+            from prodigyopt import Prodigy
+        except ImportError:
+            raise ImportError(
+                "To use Prodigy, please install the prodigyopt library: `pip install prodigyopt`."
+            )
+        optimizer_class = Prodigy
     else:
         optimizer_class = torch.optim.AdamW
 
@@ -1191,14 +1206,17 @@ def main(args):
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
 
-    lr_scheduler = get_scheduler(
-        args.lr_scheduler,
-        optimizer=optimizer,
-        num_warmup_steps=args.lr_warmup_steps * accelerator.num_processes,
-        num_training_steps=args.max_train_steps * accelerator.num_processes,
-        num_cycles=args.lr_num_cycles,
-        power=args.lr_power,
-    )
+    if args.use_cosine_annealing_schedule: # to be used with Prodigy
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_train_steps)
+    else:
+        lr_scheduler = get_scheduler(
+            args.lr_scheduler,
+            optimizer=optimizer,
+            num_warmup_steps=args.lr_warmup_steps,
+            num_training_steps=args.max_train_steps,
+            num_cycles=args.lr_num_cycles,
+            power=args.lr_power,
+        )
 
     # Prepare everything with our `accelerator`.
     t2iadapter, optimizer, lr_scheduler = accelerator.prepare(
