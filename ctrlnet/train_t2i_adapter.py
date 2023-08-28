@@ -16,6 +16,7 @@
 import argparse
 import functools
 import gc
+import itertools
 import json
 import logging
 import math
@@ -23,56 +24,50 @@ import os
 import random
 import shutil
 from pathlib import Path
+from typing import List, Optional, Union
 
 import accelerate
+import cv2
+import matplotlib
+import matplotlib.cm
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import torchvision.transforms.functional as TF
 import transformers
+import webdataset as wds
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
+from braceexpand import braceexpand
 from huggingface_hub import create_repo, upload_folder
 from packaging import version
 from PIL import Image
-from torchvision import transforms
-import torchvision.transforms.functional as TF
-from tqdm.auto import tqdm
-from transformers import AutoTokenizer, PretrainedConfig
-import webdataset as wds
-import matplotlib
-import matplotlib.cm
-
-import diffusers
-from diffusers import (
-    AutoencoderKL,
-    ControlNetModel,
-    DDPMScheduler,
-    StableDiffusionXLAdapterPipeline,
-    UNet2DConditionModel,
-    EulerDiscreteScheduler,
-    T2IAdapter,
-)
-from diffusers.optimization import get_scheduler
-from diffusers.utils import check_min_version, is_wandb_available
-from diffusers.utils.import_utils import is_xformers_available
-
-import itertools
-from typing import List, Optional, Union
-
-from braceexpand import braceexpand
 from torch.utils.data import default_collate
-from transformers import DPTFeatureExtractor, DPTForDepthEstimation
+from torchvision import transforms
+from tqdm.auto import tqdm
+from transformers import AutoTokenizer, DPTFeatureExtractor, DPTForDepthEstimation, PretrainedConfig
 from webdataset.tariterators import (
     base_plus_ext,
     tar_file_expander,
     url_opener,
     valid_sample,
 )
-import cv2
 
-from pix2pix_dataloader import get_dataloader
+import diffusers
+from diffusers import (
+    AutoencoderKL,
+    ControlNetModel,
+    EulerDiscreteScheduler,
+    StableDiffusionXLAdapterPipeline,
+    T2IAdapter,
+    UNet2DConditionModel,
+)
+from diffusers.optimization import get_scheduler
+from diffusers.utils import check_min_version, is_wandb_available
+from diffusers.utils.import_utils import is_xformers_available
+
 
 MAX_SEQ_LENGTH = 77
 
@@ -89,7 +84,18 @@ import matplotlib.cm
 import numpy as np
 import torch
 
-def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, invalid_mask=None, background_color=(128, 128, 128, 255), value_transform=None, num_channels=1):
+
+def colorize(
+    value,
+    vmin=None,
+    vmax=None,
+    cmap="magma_r",
+    invalid_val=-99,
+    invalid_mask=None,
+    background_color=(128, 128, 128, 255),
+    value_transform=None,
+    num_channels=1,
+):
     """Converts a depth map to a color image.
     Args:
         value (torch.Tensor, numpy.ndarry): Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
@@ -113,13 +119,13 @@ def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, inval
     mask = np.logical_not(invalid_mask)
 
     # normalize
-    vmin = np.percentile(value[mask],2) if vmin is None else vmin
-    vmax = np.percentile(value[mask],85) if vmax is None else vmax
+    vmin = np.percentile(value[mask], 2) if vmin is None else vmin
+    vmax = np.percentile(value[mask], 85) if vmax is None else vmax
     if vmin != vmax:
         value = (value - vmin) / (vmax - vmin)  # vmin..vmax
     else:
         # Avoid 0-division
-        value = value * 0.
+        value = value * 0.0
 
     # squeeze last dim if it exists
     # grey out the invalid values
@@ -140,7 +146,7 @@ def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, inval
     img = np.power(img, 2.2)
     img = img * 255
     img = img.astype(np.uint8)
-    img = Image.fromarray(img).convert('L')
+    img = Image.fromarray(img).convert("L")
     img = np.array(img).astype(np.float32) / 255
     return img
 
@@ -173,7 +179,7 @@ def group_by_keys_nothrow(data, keys=base_plus_ext, lcase=True, suffixes=None, h
         if current_sample is None or prefix != current_sample["__key__"] or suffix in current_sample:
             if valid_sample(current_sample):
                 yield current_sample
-            current_sample = dict(__key__=prefix, __url__=filesample["__url__"])
+            current_sample = {"__key__": prefix, "__url__": filesample["__url__"]}
         if suffixes is None or suffix in suffixes:
             current_sample[suffix] = value
     if valid_sample(current_sample):
@@ -200,25 +206,27 @@ def control_transform(image, low_threshold=100, high_threshold=200, shift_range=
         control_image = control_image.convert("L")
     return control_image
 
+
 def canny_image_transform(example, resolution=1024, num_channels=1):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
-    
+
     # get crop coordinates
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = TF.crop(image, c_top, c_left, resolution, resolution)
-    
+
     control_image = control_transform(image, num_channels=num_channels)
-    
+
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
     control_image = TF.to_tensor(control_image)
-    
+
     example["image"] = image
     example["control_image"] = control_image
     example["crop_coords"] = (c_top, c_left)
-    
+
     return example
+
 
 def depth_image_transform(example, feature_extractor, resolution=1024):
     image = example["image"]
@@ -226,19 +234,19 @@ def depth_image_transform(example, feature_extractor, resolution=1024):
     # get crop coordinates
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = transforms.functional.crop(image, c_top, c_left, resolution, resolution)
-    
+
     if feature_extractor is not None:
         control_image = feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze(0)
     else:
         control_image = transforms.ToTensor()(image)
-    
+
     image = transforms.ToTensor()(image)
     image = transforms.Normalize([0.5], [0.5])(image)
-    
+
     example["image"] = image
     example["control_image"] = control_image
     example["crop_coords"] = (c_top, c_left)
-    
+
     return example
 
 
@@ -289,14 +297,24 @@ class Text2ImageDataset:
             return (int(json.get("original_width", 0.0)), int(json.get("original_height", 0.0)))
 
         if control_type == "canny":
-            image_transform = functools.partial(canny_image_transform, resolution=resolution, num_channels=num_channels)
+            image_transform = functools.partial(
+                canny_image_transform, resolution=resolution, num_channels=num_channels
+            )
         elif control_type == "depth":
-            image_transform = functools.partial(depth_image_transform, feature_extractor=feature_extractor, resolution=resolution)
+            image_transform = functools.partial(
+                depth_image_transform, feature_extractor=feature_extractor, resolution=resolution
+            )
 
         processing_pipeline = [
             wds.decode("pil", handler=wds.ignore_and_continue),
-            wds.rename(image="jpg;png;jpeg;webp", control_image="jpg;png;jpeg;webp", text="text;txt;caption", orig_size="json", handler=wds.warn_and_continue),
-            wds.map(filter_keys(set(["image", "control_image", "text", "orig_size"]))),
+            wds.rename(
+                image="jpg;png;jpeg;webp",
+                control_image="jpg;png;jpeg;webp",
+                text="text;txt;caption",
+                orig_size="json",
+                handler=wds.warn_and_continue,
+            ),
+            wds.map(filter_keys({"image", "control_image", "text", "orig_size"})),
             wds.map_dict(orig_size=get_orig_size),
             wds.map(image_transform),
             wds.to_tuple("image", "control_image", "text", "orig_size", "crop_coords"),
@@ -536,9 +554,7 @@ def parse_args(input_args=None):
         type=str,
         default=None,
         required=False,
-        help=(
-            "Path to pretrained depth model or model identifier from huggingface.co/models."
-        ),
+        help=("Path to pretrained depth model or model identifier from huggingface.co/models."),
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -662,9 +678,7 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--use_8bit_adam", action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes."
     )
-    parser.add_argument(
-        "--use_prodigy_optim", action="store_true", help="Whether or not to use Prodigy optimizer."
-    )
+    parser.add_argument("--use_prodigy_optim", action="store_true", help="Whether or not to use Prodigy optimizer.")
     parser.add_argument(
         "--use_cosine_annealing_schedule", action="store_true", help="Whether or not to use cosine annealing schedule."
     )
@@ -672,9 +686,7 @@ def parse_args(input_args=None):
         "--dataloader_num_workers",
         type=int,
         default=1,
-        help=(
-            "Number of subprocesses to use for data loading."
-        ),
+        help=("Number of subprocesses to use for data loading."),
     )
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="The beta1 parameter for the Adam optimizer.")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="The beta2 parameter for the Adam optimizer.")
@@ -814,10 +826,7 @@ def parse_args(input_args=None):
         "--control_type",
         type=str,
         default="canny",
-        help=(
-            "The type of t2iadapter conditioning image to use. One of `canny`, `depth`"
-            " Defaults to `canny`."
-        ),
+        help=("The type of t2iadapter conditioning image to use. One of `canny`, `depth`" " Defaults to `canny`."),
     )
     parser.add_argument(
         "--use_euler",
@@ -858,13 +867,13 @@ def parse_args(input_args=None):
     if args.validation_prompt is None and args.validation_image is not None:
         raise ValueError("`--validation_prompt` must be set if `--validation_image` is set")
 
-
     if args.resolution % 8 != 0:
         raise ValueError(
             "`--resolution` must be divisible by 8 for consistently sized encoded images between the VAE and the t2iadapter encoder."
         )
 
     return args
+
 
 # Adapted from pipelines.StableDiffusionXLPipeline.encode_prompt
 def encode_prompt(prompt_batch, text_encoders, tokenizers, proportion_empty_prompts, is_train=True):
@@ -905,6 +914,7 @@ def encode_prompt(prompt_batch, text_encoders, tokenizers, proportion_empty_prom
     prompt_embeds = torch.concat(prompt_embeds_list, dim=-1)
     pooled_prompt_embeds = pooled_prompt_embeds.view(bs_embed, -1)
     return prompt_embeds, pooled_prompt_embeds
+
 
 def main(args):
     logging_dir = Path(args.output_dir, args.logging_dir)
@@ -995,9 +1005,9 @@ def main(args):
         channels=(320, 640, 1280, 1280),
         num_res_blocks=2,
         downscale_factor=16,
-        adapter_type="full_adapter_xl"
+        adapter_type="full_adapter_xl",
     )
-    
+
     if args.control_type == "depth":
         if args.depth_model_name_or_path == "zoe":
             # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
@@ -1099,9 +1109,7 @@ def main(args):
         try:
             from prodigyopt import Prodigy
         except ImportError:
-            raise ImportError(
-                "To use Prodigy, please install the prodigyopt library: `pip install prodigyopt`."
-            )
+            raise ImportError("To use Prodigy, please install the prodigyopt library: `pip install prodigyopt`.")
         optimizer_class = Prodigy
     else:
         optimizer_class = torch.optim.AdamW
@@ -1141,7 +1149,9 @@ def main(args):
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
-    def compute_embeddings(prompt_batch, original_sizes, crop_coords, proportion_empty_prompts, text_encoders, tokenizers, is_train=True):
+    def compute_embeddings(
+        prompt_batch, original_sizes, crop_coords, proportion_empty_prompts, text_encoders, tokenizers, is_train=True
+    ):
         target_size = (args.resolution, args.resolution)
         original_sizes = list(map(list, zip(*original_sizes)))
         crops_coords_top_left = list(map(list, zip(*crop_coords)))
@@ -1170,7 +1180,6 @@ def main(args):
 
         return {"prompt_embeds": prompt_embeds, **unet_added_cond_kwargs}
 
-
     def get_sigmas(timesteps, n_dim=4, dtype=torch.float32):
         sigmas = noise_scheduler.sigmas.to(device=accelerator.device, dtype=dtype)
         schedule_timesteps = noise_scheduler.timesteps.to(accelerator.device)
@@ -1183,7 +1192,6 @@ def main(args):
             sigma = sigma.unsqueeze(-1)
         return sigma
 
-    
     dataset = Text2ImageDataset(
         train_shards_path_or_url=args.train_shards_path_or_url,
         num_train_examples=args.max_train_samples,
@@ -1221,7 +1229,7 @@ def main(args):
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
 
-    if args.use_cosine_annealing_schedule: # to be used with Prodigy
+    if args.use_cosine_annealing_schedule:  # to be used with Prodigy
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_train_steps)
     else:
         lr_scheduler = get_scheduler(
@@ -1234,9 +1242,7 @@ def main(args):
         )
 
     # Prepare everything with our `accelerator`.
-    t2iadapter, optimizer, lr_scheduler = accelerator.prepare(
-        t2iadapter, optimizer, lr_scheduler
-    )
+    t2iadapter, optimizer, lr_scheduler = accelerator.prepare(t2iadapter, optimizer, lr_scheduler)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(train_dataloader.num_batches / args.gradient_accumulation_steps)
@@ -1320,24 +1326,28 @@ def main(args):
                         vae.to(dtype=weight_dtype)
                 else:
                     pixel_values = image
-                
+
                 # latents = vae.encode(pixel_values).latent_dist.sample()
                 # encode pixel values with batch size of at most 8
                 latents = []
                 for i in range(0, pixel_values.shape[0], 8):
-                    latents.append(vae.encode(pixel_values[i:i+8]).latent_dist.sample())
+                    latents.append(vae.encode(pixel_values[i : i + 8]).latent_dist.sample())
                 latents = torch.cat(latents, dim=0)
-                
+
                 latents = latents * vae.config.scaling_factor
                 if args.pretrained_vae_model_name_or_path is None:
                     latents = latents.to(weight_dtype)
-                
+
                 if args.control_type == "depth":
                     if args.depth_model_name_or_path == "zoe":
-                       with torch.autocast("cuda", enabled=True):
+                        with torch.autocast("cuda", enabled=True):
                             depth_map = depth_model.infer(control_image)
+
                         # apply the colorize function to each example in the batch and concatenate
-                        control_image = [torch.tensor(colorize(depth_map[i], cmap="gray_r", num_channels=args.adapter_in_channels)) for i in range(depth_map.shape[0])]
+                        control_image = [
+                            torch.tensor(colorize(depth_map[i], cmap="gray_r", num_channels=args.adapter_in_channels))
+                            for i in range(depth_map.shape[0])
+                        ]
                         control_image = torch.stack(control_image, dim=0).to(accelerator.device, dtype=weight_dtype)
                         control_image = control_image.unsqueeze(1)
                     else:
@@ -1353,8 +1363,8 @@ def main(args):
                         depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
                         depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
                         depth_map = (depth_map - depth_min) / (depth_max - depth_min)
-                        control_image = (depth_map * 255.).to(torch.uint8).float() / 255. # hack to match inference
-                    
+                        control_image = (depth_map * 255.0).to(torch.uint8).float() / 255.0  # hack to match inference
+
                     if args.adapter_in_channels == 3:
                         control_image = torch.cat([control_image] * 3, dim=1)
 
@@ -1365,18 +1375,20 @@ def main(args):
                 # Sample a random timestep for each image
                 if args.use_non_uniform_timesteps:
                     # Cubic sampling to sample a random timestep for each image
-                    timesteps = torch.rand((bsz, ), device=latents.device)
+                    timesteps = torch.rand((bsz,), device=latents.device)
                     timesteps = (1 - timesteps**3) * noise_scheduler.config.num_train_timesteps
                     timesteps = timesteps.long().to(noise_scheduler.timesteps.dtype)
                     timesteps = timesteps.clamp(0, noise_scheduler.config.num_train_timesteps - 1)
                 else:
-                    timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+                    timesteps = torch.randint(
+                        0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device
+                    )
                     timesteps = timesteps.long()
 
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-                
+
                 if args.use_euler:
                     sigmas = get_sigmas(timesteps, len(noisy_latents.shape), noisy_latents.dtype)
                     inp_noisy_latents = noisy_latents / ((sigmas**2 + 1) ** 0.5)
@@ -1405,7 +1417,6 @@ def main(args):
                     model_pred = model_pred * (-sigmas) + noisy_latents
                     weighing = sigmas**-2.0
 
-
                 # Get the target for loss depending on the prediction type
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = latents if args.use_euler else noise
@@ -1413,7 +1424,7 @@ def main(args):
                     target = noise_scheduler.get_velocity(latents, noise, timesteps)
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-                
+
                 if args.use_euler:
                     loss = torch.mean(
                         (weighing.float() * (model_pred.float() - target.float()) ** 2).reshape(target.shape[0], -1), 1
