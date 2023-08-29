@@ -69,6 +69,8 @@ from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
+from pidinet import pidinet
+
 
 MAX_SEQ_LENGTH = 77
 
@@ -80,6 +82,11 @@ check_min_version("0.18.0.dev0")
 
 logger = get_logger(__name__)
 
+
+def random_threshold(edge, low_threshold=0.3, high_threshold=0.8):
+    threshold = round(random.uniform(low_threshold, high_threshold), 1)
+    edge = edge > threshold
+    return edge
 
 def colorize(
     value,
@@ -246,6 +253,23 @@ def depth_image_transform(example, feature_extractor, resolution=1024):
     return example
 
 
+def sketch_image_transform(example, resolution=1024, num_channels=1):
+    image = example["image"]
+    image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
+
+    # get crop coordinates
+    c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
+    image = TF.crop(image, c_top, c_left, resolution, resolution)
+
+    image = TF.to_tensor(image)
+    image = TF.normalize(image, [0.5], [0.5])
+
+    example["image"] = image
+    example["control_image"] = image.clone()
+    example["crop_coords"] = (c_top, c_left)
+
+    return example
+
 class WebdatasetFilter:
     def __init__(self, min_size=1024, max_pwatermark=0.5):
         self.min_size = min_size
@@ -299,6 +323,10 @@ class Text2ImageDataset:
         elif control_type == "depth":
             image_transform = functools.partial(
                 depth_image_transform, feature_extractor=feature_extractor, resolution=resolution
+            )
+        elif control_type == "sketch":
+            image_transform = functools.partial(
+                sketch_image_transform, resolution=resolution, num_channels=num_channels
             )
 
         processing_pipeline = [
@@ -1018,6 +1046,21 @@ def main(args):
             feature_extractor = DPTFeatureExtractor.from_pretrained(args.depth_model_name_or_path)
             depth_model = DPTForDepthEstimation.from_pretrained(args.depth_model_name_or_path)
         depth_model.requires_grad_(False)
+    elif args.control_type == "sketch":
+        sketch_model = pidinet()
+        ckp = torch.load(
+            '/admin/home/suraj/code/muse-experiments/ctrlnet/table5_pidinet.pth', map_location='cpu',
+        )['state_dict']
+        sketch_model.load_state_dict(
+            {k.replace('module.', ''): v for k, v in ckp.items()},
+            strict=True
+        )
+
+        sketch_model.requires_grad_(False)
+
+        feature_extractor = None
+        depth_model = None
+
     else:
         feature_extractor = None
         depth_model = None
@@ -1158,6 +1201,8 @@ def main(args):
             depth_model.to(accelerator.device)
         else:
             depth_model.to(accelerator.device, dtype=weight_dtype)
+    elif args.control_type == "sketch":
+        sketch_model.to(accelerator.device)
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
@@ -1381,6 +1426,11 @@ def main(args):
 
                     if args.adapter_in_channels == 3:
                         control_image = torch.cat([control_image] * 3, dim=1)
+                elif args.control_type == "sketch":
+                    edge_map = sketch_model(control_image)[-1]
+                    edge_map = random_threshold(edge_map).to(torch.float32)
+                    if args.adapter_in_channels == 3:
+                        control_image = torch.cat([edge_map] * 3, dim=1)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
