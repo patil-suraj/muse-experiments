@@ -1007,7 +1007,7 @@ def main(args):
 
     # Create EMA for the adapter.
     if args.use_ema:
-        ema_adapter = EMAModel(t2iadapter.parameters(), model_cls=T2IAdapter, model_config=t2iadapter.config)
+        ema_adapter = EMAModel(t2iadapter.parameters(), model_cls=T2IAdapter, model_config=t2iadapter.config, inv_gamma=1, power=3/4)
 
     if args.control_type == "depth":
         if args.depth_model_name_or_path == "zoe":
