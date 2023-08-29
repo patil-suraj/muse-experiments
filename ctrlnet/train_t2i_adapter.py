@@ -270,6 +270,25 @@ def sketch_image_transform(example, resolution=1024, num_channels=1):
 
     return example
 
+def recolor_image_transform(example, resolution=1024, num_channels=1):
+    image = example["image"]
+    image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
+
+    # get crop coordinates
+    c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
+    image = TF.crop(image, c_top, c_left, resolution, resolution)
+
+    control_image = TF.to_grayscale(image, num_channels)
+
+    image = TF.to_tensor(image)
+    image = TF.normalize(image, [0.5], [0.5])
+
+    example["image"] = image
+    example["control_image"] = control_image
+    example["crop_coords"] = (c_top, c_left)
+
+    return example
+
 class WebdatasetFilter:
     def __init__(self, min_size=1024, max_pwatermark=0.5):
         self.min_size = min_size
@@ -327,6 +346,10 @@ class Text2ImageDataset:
         elif control_type == "sketch":
             image_transform = functools.partial(
                 sketch_image_transform, resolution=resolution, num_channels=num_channels
+            )
+        elif control_type == "recolor":
+            image_transform = functools.partial(
+                recolor_image_transform, resolution=resolution, num_channels=num_channels
             )
 
         processing_pipeline = [
