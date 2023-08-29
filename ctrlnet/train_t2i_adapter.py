@@ -1491,8 +1491,8 @@ def main(args):
                     if args.validation_prompt is not None and global_step % args.validation_steps == 0:
                         # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
                         if args.use_ema:
-                            ema_adapter.store(unet.parameters())
-                            ema_adapter.copy_to(unet.parameters())
+                            ema_adapter.store(t2iadapter.parameters())
+                            ema_adapter.copy_to(t2iadapter.parameters())
 
                         image_logs = log_validation(
                             vae, unet, t2iadapter, args, accelerator, weight_dtype, global_step
@@ -1500,7 +1500,7 @@ def main(args):
 
                         # Switch back to the original UNet parameters.
                         if args.use_ema:
-                            ema_adapter.restore(unet.parameters())
+                            ema_adapter.restore(t2iadapter.parameters())
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
