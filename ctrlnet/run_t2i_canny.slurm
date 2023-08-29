@@ -62,14 +62,14 @@ PROGRAM="train_t2i_adapter.py \
     --mixed_precision=fp16 \
     --resolution=1024 \
     --learning_rate=1e-5 \
-    --max_train_steps=10 \
+    --max_train_steps=20000 \
     --max_train_samples=3000000 \
     --dataloader_num_workers=8 \
     --validation_image=/admin/home/suraj/code/muse-experiments/ctrlnet/canny_images  \
     --validation_prompt 'beautiful room' 'two paradise birds' 'a snowy house behind a forest' 'a couple watching a romantic sunset' 'boats in the Amazonas' 'a beautiful face of a woman' 'a skater in Brooklyn' 'a tornado in Iowa' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.5 \
-    --validation_steps=10 \
+    --validation_steps=500 \
     --train_batch_size=16 \
     --gradient_checkpointing \
     --use_8bit_adam \
