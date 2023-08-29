@@ -1151,6 +1151,8 @@ def main(args):
     unet.to(accelerator.device, dtype=weight_dtype)
     text_encoder_one.to(accelerator.device, dtype=weight_dtype)
     text_encoder_two.to(accelerator.device, dtype=weight_dtype)
+    if args.use_ema:
+        ema_adapter.to(accelerator.device, dtype=weight_dtype)
     if args.control_type == "depth":
         if args.depth_model_name_or_path == "zoe":
             depth_model.to(accelerator.device)
