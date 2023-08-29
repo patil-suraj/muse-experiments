@@ -65,6 +65,7 @@ from diffusers import (
     UNet2DConditionModel,
 )
 from diffusers.optimization import get_scheduler
+from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
@@ -78,11 +79,6 @@ if is_wandb_available():
 check_min_version("0.18.0.dev0")
 
 logger = get_logger(__name__)
-
-import matplotlib
-import matplotlib.cm
-import numpy as np
-import torch
 
 
 def colorize(
@@ -266,7 +262,7 @@ class WebdatasetFilter:
                 return filter_size and filter_watermark
             else:
                 return False
-        except:
+        except Exception:
             return False
 
 
@@ -539,6 +535,7 @@ def parse_args(input_args=None):
         help="Path to pretrained t2iadapter model or model identifier from huggingface.co/models."
         " If not specified t2iadapter weights are initialized from unet.",
     )
+    parser.add_argument("--use_ema", action="store_true", help="Whether to use EMA model.")
     parser.add_argument(
         "--revision",
         type=str,
@@ -1008,6 +1005,10 @@ def main(args):
         adapter_type="full_adapter_xl",
     )
 
+    # Create EMA for the adapter.
+    if args.use_ema:
+        ema_adapter = EMAModel(t2iadapter.parameters(), model_cls=T2IAdapter, model_config=t2iadapter.config)
+
     if args.control_type == "depth":
         if args.depth_model_name_or_path == "zoe":
             # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
@@ -1025,6 +1026,9 @@ def main(args):
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
         def save_model_hook(models, weights, output_dir):
+            if args.use_ema:
+                ema_adapter.save_pretrained(os.path.join(output_dir, "t2iadapter_ema"))
+
             i = len(weights) - 1
 
             while len(weights) > 0:
@@ -1037,6 +1041,12 @@ def main(args):
                 i -= 1
 
         def load_model_hook(models, input_dir):
+            if args.use_ema:
+                load_model = EMAModel.from_pretrained(os.path.join(input_dir, "t2iadapter_ema"), T2IAdapter)
+                ema_adapter.load_state_dict(load_model.state_dict())
+                ema_adapter.to(accelerator.device)
+                del load_model
+
             while len(models) > 0:
                 # pop models so that they are not loaded again
                 model = models.pop()
@@ -1243,6 +1253,8 @@ def main(args):
 
     # Prepare everything with our `accelerator`.
     t2iadapter, optimizer, lr_scheduler = accelerator.prepare(t2iadapter, optimizer, lr_scheduler)
+    if args.use_ema:
+        ema_adapter = accelerator.prepare(ema_adapter)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(train_dataloader.num_batches / args.gradient_accumulation_steps)
@@ -1443,6 +1455,8 @@ def main(args):
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
+                if args.use_ema:
+                    ema_adapter.step(unet.parameters())
                 progress_bar.update(1)
                 global_step += 1
 
@@ -1473,9 +1487,18 @@ def main(args):
                         logger.info(f"Saved state to {save_path}")
 
                     if args.validation_prompt is not None and global_step % args.validation_steps == 0:
+                        # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
+                        if args.use_ema:
+                            ema_adapter.store(unet.parameters())
+                            ema_adapter.copy_to(unet.parameters())
+
                         image_logs = log_validation(
                             vae, unet, t2iadapter, args, accelerator, weight_dtype, global_step
                         )
+
+                        # Switch back to the original UNet parameters.
+                        if args.use_ema:
+                            ema_adapter.restore(unet.parameters())
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
@@ -1489,6 +1512,9 @@ def main(args):
     if accelerator.is_main_process:
         t2iadapter = accelerator.unwrap_model(t2iadapter)
         t2iadapter.save_pretrained(args.output_dir)
+        if args.use_ema:
+            ema_adapter.copy_to(t2iadapter.parameters())
+            t2iadapter.save_pretrained(os.path.join(args.output_dir, "t2iadapter_ema"))
 
         if args.push_to_hub:
             save_model_card(
