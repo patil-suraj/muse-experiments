@@ -279,6 +279,7 @@ def recolor_image_transform(example, resolution=1024, num_channels=1):
     image = TF.crop(image, c_top, c_left, resolution, resolution)
 
     control_image = TF.to_grayscale(image, num_channels)
+    control_image = TF.to_tensor(control_image)
 
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
