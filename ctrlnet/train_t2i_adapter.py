@@ -1456,7 +1456,7 @@ def main(args):
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
                 if args.use_ema:
-                    ema_adapter.step(unet.parameters())
+                    ema_adapter.step(t2iadapter.parameters())
                 progress_bar.update(1)
                 global_step += 1
 
