@@ -1495,7 +1495,7 @@ def main(args):
                     if args.adapter_in_channels == 3:
                         control_image = torch.cat([control_image] * 3, dim=1)
                 elif args.control_type == "lineart":
-                    line_map = lineart_model(control_image)
+                    line_map = lineart_model(control_image, resize_to=(args.resolution, args.resolution))
                     control_image = line_map.float() / 255.0
                     if args.adapter_in_channels == 3:
                         control_image = torch.cat([control_image] * 3, dim=1)
