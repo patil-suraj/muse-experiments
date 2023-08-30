@@ -42,6 +42,7 @@ from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from braceexpand import braceexpand
 from huggingface_hub import create_repo, upload_folder
+from lineart import LineartDetector
 from packaging import version
 from pidinet import pidinet
 from PIL import Image
@@ -294,6 +295,27 @@ def recolor_image_transform(example, resolution=1024, num_channels=1, normalize_
     return example
 
 
+def lineart_image_transform(example, resolution=1024):
+    image = example["image"]
+    image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
+
+    # get crop coordinates
+    c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
+    image = TF.crop(image, c_top, c_left, resolution, resolution)
+
+    control_image = TF.resize(image, (384, 384), interpolation=transforms.InterpolationMode.BILINEAR)
+    control_image = TF.to_tensor(control_image)
+
+    image = TF.to_tensor(image)
+    image = TF.normalize(image, [0.5], [0.5])
+
+    example["image"] = image
+    example["control_image"] = control_image
+    example["crop_coords"] = (c_top, c_left)
+
+    return example
+
+
 class WebdatasetFilter:
     def __init__(self, min_size=1024, max_pwatermark=0.5):
         self.min_size = min_size
@@ -363,6 +385,8 @@ class Text2ImageDataset:
                 num_channels=num_channels,
                 normalize_adapter_image=normalize_adapter_image,
             )
+        elif control_type == "lineart":
+            image_transform = functools.partial(lineart_image_transform, resolution=resolution)
 
         processing_pipeline = [
             wds.decode("pil", handler=wds.ignore_and_continue),
@@ -1080,11 +1104,12 @@ def main(args):
             t2iadapter.parameters(), model_cls=T2IAdapter, model_config=t2iadapter.config, inv_gamma=1, power=3 / 4
         )
 
+    feature_extractor = None
+    depth_model = None
     if args.control_type == "depth":
         if args.depth_model_name_or_path == "zoe":
             # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
             depth_model = torch.hub.load("isl-org/ZoeDepth", "ZoeD_NK", pretrained=True).eval()
-            feature_extractor = None
         else:
             feature_extractor = DPTFeatureExtractor.from_pretrained(args.depth_model_name_or_path)
             depth_model = DPTForDepthEstimation.from_pretrained(args.depth_model_name_or_path)
@@ -1096,15 +1121,9 @@ def main(args):
             map_location="cpu",
         )["state_dict"]
         sketch_model.load_state_dict({k.replace("module.", ""): v for k, v in ckp.items()}, strict=True)
-
         sketch_model.requires_grad_(False)
-
-        feature_extractor = None
-        depth_model = None
-
-    else:
-        feature_extractor = None
-        depth_model = None
+    elif args.control_type == "lineart":
+        lineart_model = LineartDetector()
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
@@ -1244,6 +1263,8 @@ def main(args):
             depth_model.to(accelerator.device, dtype=weight_dtype)
     elif args.control_type == "sketch":
         sketch_model.to(accelerator.device)
+    elif args.control_type == "lineart":
+        lineart_model.to(accelerator.device)
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
@@ -1470,9 +1491,14 @@ def main(args):
                         control_image = torch.cat([control_image] * 3, dim=1)
                 elif args.control_type == "sketch":
                     edge_map = sketch_model(control_image)[-1]
-                    edge_map = random_threshold(edge_map).to(torch.float32)
+                    control_image = random_threshold(edge_map).to(torch.float32)
                     if args.adapter_in_channels == 3:
-                        control_image = torch.cat([edge_map] * 3, dim=1)
+                        control_image = torch.cat([control_image] * 3, dim=1)
+                elif args.control_type == "lineart":
+                    line_map = lineart_model(control_image)
+                    control_image = line_map.float() / 255.0
+                    if args.adapter_in_channels == 3:
+                        control_image = torch.cat([control_image] * 3, dim=1)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
