@@ -211,7 +211,7 @@ def control_transform(image, low_threshold=100, high_threshold=200, shift_range=
     return image
 
 
-def canny_image_transform(example, resolution=1024, num_channels=1, normalize_adapter_image=False):
+def canny_image_transform(example, resolution=1024, num_channels=1, normalize_adapter_image=False, detection_resolution=None):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
 
@@ -219,7 +219,12 @@ def canny_image_transform(example, resolution=1024, num_channels=1, normalize_ad
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = TF.crop(image, c_top, c_left, resolution, resolution)
 
-    control_image = control_transform(image, num_channels=num_channels)
+    if detection_resolution is not None:
+        control_image = TF.resize(image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR)
+        control_image = control_transform(control_image, num_channels=num_channels)
+        control_image = TF.resize(control_image, (resolution, resolution), interpolation=transforms.InterpolationMode.BILINEAR)
+    else:
+        control_image = control_transform(image, num_channels=num_channels)
 
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
@@ -255,7 +260,7 @@ def depth_image_transform(example, feature_extractor, resolution=1024):
     return example
 
 
-def sketch_image_transform(example, resolution=1024, num_channels=1):
+def sketch_image_transform(example, resolution=1024, detection_resolution=None):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
 
@@ -263,11 +268,17 @@ def sketch_image_transform(example, resolution=1024, num_channels=1):
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = TF.crop(image, c_top, c_left, resolution, resolution)
 
+    if detection_resolution is not None:
+        control_image = TF.resize(image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR)
+        control_image = TF.to_tensor(control_image)
+    else:
+        control_image = TF.to_tensor(image)
+
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
 
     example["image"] = image
-    example["control_image"] = image.clone()
+    example["control_image"] = control_image
     example["crop_coords"] = (c_top, c_left)
 
     return example
@@ -295,16 +306,19 @@ def recolor_image_transform(example, resolution=1024, num_channels=1, normalize_
     return example
 
 
-def lineart_image_transform(example, resolution=1024):
+def lineart_image_transform(example, resolution=1024, detection_resolution=None):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
 
     # get crop coordinates
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = TF.crop(image, c_top, c_left, resolution, resolution)
-
-    control_image = TF.resize(image, (384, 384), interpolation=transforms.InterpolationMode.BILINEAR)
-    control_image = TF.to_tensor(control_image)
+    
+    if detection_resolution is not None:
+        control_image = TF.resize(image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR)
+        control_image = TF.to_tensor(control_image)
+    else:
+        control_image = TF.to_tensor(image)
 
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
@@ -354,6 +368,7 @@ class Text2ImageDataset:
         feature_extractor: Optional[DPTFeatureExtractor] = None,
         num_channels: int = 1,
         normalize_adapter_image=False,
+        detection_resolution=None,
     ):
         if not isinstance(train_shards_path_or_url, str):
             train_shards_path_or_url = [list(braceexpand(urls)) for urls in train_shards_path_or_url]
@@ -369,15 +384,14 @@ class Text2ImageDataset:
                 resolution=resolution,
                 num_channels=num_channels,
                 normalize_adapter_image=normalize_adapter_image,
+                detection_resolution=detection_resolution,
             )
         elif control_type == "depth":
             image_transform = functools.partial(
                 depth_image_transform, feature_extractor=feature_extractor, resolution=resolution
             )
         elif control_type == "sketch":
-            image_transform = functools.partial(
-                sketch_image_transform, resolution=resolution, num_channels=num_channels
-            )
+            image_transform = functools.partial(sketch_image_transform, resolution=resolution, detection_resolution=detection_resolution)
         elif control_type == "recolor":
             image_transform = functools.partial(
                 recolor_image_transform,
@@ -386,7 +400,7 @@ class Text2ImageDataset:
                 normalize_adapter_image=normalize_adapter_image,
             )
         elif control_type == "lineart":
-            image_transform = functools.partial(lineart_image_transform, resolution=resolution)
+            image_transform = functools.partial(lineart_image_transform, resolution=resolution, detection_resolution=detection_resolution)
 
         processing_pipeline = [
             wds.decode("pil", handler=wds.ignore_and_continue),
@@ -663,6 +677,15 @@ def parse_args(input_args=None):
         "--resolution",
         type=int,
         default=512,
+        help=(
+            "The resolution for input images, all the images in the train/validation dataset will be resized to this"
+            " resolution"
+        ),
+    )
+    parser.add_argument(
+        "--detection_resolution",
+        type=int,
+        default=None,
         help=(
             "The resolution for input images, all the images in the train/validation dataset will be resized to this"
             " resolution"
@@ -1327,6 +1350,7 @@ def main(args):
         feature_extractor=feature_extractor,
         num_channels=args.adapter_in_channels,
         normalize_adapter_image=args.normalize_adapter_image,
+        detection_resolution=args.detection_resolution,
     )
     train_dataloader = dataset.train_dataloader
 
@@ -1492,6 +1516,14 @@ def main(args):
                 elif args.control_type == "sketch":
                     edge_map = sketch_model(control_image)[-1]
                     control_image = random_threshold(edge_map).to(torch.float32)
+                    # if detection resolution is specified, resize the control image back to the original resolution
+                    if args.detection_resolution is not None:
+                        control_image = torch.nn.functional.interpolate(
+                            control_image,
+                            size=(args.resolution, args.resolution),
+                            mode="bicubic",
+                            align_corners=False,
+                        )
                     if args.adapter_in_channels == 3:
                         control_image = torch.cat([control_image] * 3, dim=1)
                 elif args.control_type == "lineart":
