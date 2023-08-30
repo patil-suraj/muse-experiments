@@ -42,6 +42,7 @@ from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from braceexpand import braceexpand
 from huggingface_hub import create_repo, upload_folder
+from inpaint_masking_utils import OutpaintingMaskGenerator, make_random_irregular_mask, make_random_rectangle_mask
 from lineart import LineartDetector
 from packaging import version
 from pidinet import pidinet
@@ -211,7 +212,9 @@ def control_transform(image, low_threshold=100, high_threshold=200, shift_range=
     return image
 
 
-def canny_image_transform(example, resolution=1024, num_channels=1, normalize_adapter_image=False, detection_resolution=None):
+def canny_image_transform(
+    example, resolution=1024, num_channels=1, normalize_adapter_image=False, detection_resolution=None
+):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
 
@@ -220,9 +223,13 @@ def canny_image_transform(example, resolution=1024, num_channels=1, normalize_ad
     image = TF.crop(image, c_top, c_left, resolution, resolution)
 
     if detection_resolution is not None:
-        control_image = TF.resize(image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR)
+        control_image = TF.resize(
+            image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR
+        )
         control_image = control_transform(control_image, num_channels=num_channels)
-        control_image = TF.resize(control_image, (resolution, resolution), interpolation=transforms.InterpolationMode.BILINEAR)
+        control_image = TF.resize(
+            control_image, (resolution, resolution), interpolation=transforms.InterpolationMode.BILINEAR
+        )
     else:
         control_image = control_transform(image, num_channels=num_channels)
 
@@ -269,7 +276,9 @@ def sketch_image_transform(example, resolution=1024, detection_resolution=None):
     image = TF.crop(image, c_top, c_left, resolution, resolution)
 
     if detection_resolution is not None:
-        control_image = TF.resize(image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR)
+        control_image = TF.resize(
+            image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR
+        )
         control_image = TF.to_tensor(control_image)
     else:
         control_image = TF.to_tensor(image)
@@ -313,9 +322,11 @@ def lineart_image_transform(example, resolution=1024, detection_resolution=None)
     # get crop coordinates
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = TF.crop(image, c_top, c_left, resolution, resolution)
-    
+
     if detection_resolution is not None:
-        control_image = TF.resize(image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR)
+        control_image = TF.resize(
+            image, (detection_resolution, detection_resolution), interpolation=transforms.InterpolationMode.BILINEAR
+        )
         control_image = TF.to_tensor(control_image)
     else:
         control_image = TF.to_tensor(image)
@@ -325,6 +336,46 @@ def lineart_image_transform(example, resolution=1024, detection_resolution=None)
 
     example["image"] = image
     example["control_image"] = control_image
+    example["crop_coords"] = (c_top, c_left)
+
+    return example
+
+
+def mask_image_transform(example, resolution=1024):
+    # create mask
+    if random.random() < 0.25:  # 25% of the time, use a full mask
+        mask = np.ones((resolution, resolution), np.float32)
+    else:
+        masking_types = ["rectangle", "irregular", "outpainting"]
+        mask_type = random.choice(masking_types)
+        if mask_type == "rectangle":
+            mask = make_random_rectangle_mask(resolution, resolution)
+        elif mask_type == "irregular":
+            mask = make_random_irregular_mask(resolution, resolution)
+        else:
+            mask = OutpaintingMaskGenerator(max_padding_percent=0.5)(resolution, resolution)
+
+    # prepare mask
+    mask = mask[None]
+    mask = torch.from_numpy(mask)
+
+    # resize image
+    image = example["image"]
+    image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
+    # get crop coordinates and crop image
+    c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
+    image = TF.crop(image, c_top, c_left, resolution, resolution)
+    image = TF.to_tensor(image)
+    
+    # create masked image
+    masked_image = image.clone()
+    masked_image[image_mask > 0.5] = -1.0  # set as masked pixel
+
+    # normalize image
+    image = TF.normalize(image, [0.5], [0.5])
+
+    example["image"] = image
+    example["control_image"] = masked_image
     example["crop_coords"] = (c_top, c_left)
 
     return example
@@ -391,7 +442,9 @@ class Text2ImageDataset:
                 depth_image_transform, feature_extractor=feature_extractor, resolution=resolution
             )
         elif control_type == "sketch":
-            image_transform = functools.partial(sketch_image_transform, resolution=resolution, detection_resolution=detection_resolution)
+            image_transform = functools.partial(
+                sketch_image_transform, resolution=resolution, detection_resolution=detection_resolution
+            )
         elif control_type == "recolor":
             image_transform = functools.partial(
                 recolor_image_transform,
@@ -400,7 +453,11 @@ class Text2ImageDataset:
                 normalize_adapter_image=normalize_adapter_image,
             )
         elif control_type == "lineart":
-            image_transform = functools.partial(lineart_image_transform, resolution=resolution, detection_resolution=detection_resolution)
+            image_transform = functools.partial(
+                lineart_image_transform, resolution=resolution, detection_resolution=detection_resolution
+            )
+        elif control_type == "mask":
+            image_transform = functools.partial(mask_image_transform, resolution=resolution)
 
         processing_pipeline = [
             wds.decode("pil", handler=wds.ignore_and_continue),
