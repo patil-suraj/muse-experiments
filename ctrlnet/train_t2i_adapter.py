@@ -355,10 +355,6 @@ def mask_image_transform(example, resolution=1024):
         else:
             mask = OutpaintingMaskGenerator(max_padding_percent=0.5)(resolution, resolution)
 
-    # prepare mask
-    mask = mask[None]
-    mask = torch.from_numpy(mask)
-
     # resize image
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
@@ -368,8 +364,10 @@ def mask_image_transform(example, resolution=1024):
     image = TF.to_tensor(image)
     
     # create masked image
-    masked_image = image.clone()
+    mask = torch.from_numpy(mask)
+    masked_image = image.clone().permute(1, 2, 0)
     masked_image[mask > 0.5] = -1.0  # set as masked pixel
+    masked_image = masked_image.permute(2, 0, 1)
 
     # normalize image
     image = TF.normalize(image, [0.5], [0.5])
