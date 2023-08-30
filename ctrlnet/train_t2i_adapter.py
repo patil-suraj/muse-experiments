@@ -43,6 +43,7 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from braceexpand import braceexpand
 from huggingface_hub import create_repo, upload_folder
 from packaging import version
+from pidinet import pidinet
 from PIL import Image
 from torch.utils.data import default_collate
 from torchvision import transforms
@@ -69,8 +70,6 @@ from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
-from pidinet import pidinet
-
 
 MAX_SEQ_LENGTH = 77
 
@@ -87,6 +86,7 @@ def random_threshold(edge, low_threshold=0.3, high_threshold=0.8):
     threshold = round(random.uniform(low_threshold, high_threshold), 1)
     edge = edge > threshold
     return edge
+
 
 def colorize(
     value,
@@ -270,6 +270,7 @@ def sketch_image_transform(example, resolution=1024, num_channels=1):
 
     return example
 
+
 def recolor_image_transform(example, resolution=1024, num_channels=1):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
@@ -289,6 +290,7 @@ def recolor_image_transform(example, resolution=1024, num_channels=1):
     example["crop_coords"] = (c_top, c_left)
 
     return example
+
 
 class WebdatasetFilter:
     def __init__(self, min_size=1024, max_pwatermark=0.5):
@@ -1059,7 +1061,9 @@ def main(args):
 
     # Create EMA for the adapter.
     if args.use_ema:
-        ema_adapter = EMAModel(t2iadapter.parameters(), model_cls=T2IAdapter, model_config=t2iadapter.config, inv_gamma=1, power=3/4)
+        ema_adapter = EMAModel(
+            t2iadapter.parameters(), model_cls=T2IAdapter, model_config=t2iadapter.config, inv_gamma=1, power=3 / 4
+        )
 
     if args.control_type == "depth":
         if args.depth_model_name_or_path == "zoe":
@@ -1073,12 +1077,10 @@ def main(args):
     elif args.control_type == "sketch":
         sketch_model = pidinet()
         ckp = torch.load(
-            '/admin/home/suraj/code/muse-experiments/ctrlnet/table5_pidinet.pth', map_location='cpu',
-        )['state_dict']
-        sketch_model.load_state_dict(
-            {k.replace('module.', ''): v for k, v in ckp.items()},
-            strict=True
-        )
+            "/admin/home/suraj/code/muse-experiments/ctrlnet/table5_pidinet.pth",
+            map_location="cpu",
+        )["state_dict"]
+        sketch_model.load_state_dict({k.replace("module.", ""): v for k, v in ckp.items()}, strict=True)
 
         sketch_model.requires_grad_(False)
 
