@@ -210,7 +210,7 @@ def control_transform(image, low_threshold=100, high_threshold=200, shift_range=
     return control_image
 
 
-def canny_image_transform(example, resolution=1024, num_channels=1):
+def canny_image_transform(example, resolution=1024, num_channels=1, normalize_adapter_image=False):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
 
@@ -223,6 +223,7 @@ def canny_image_transform(example, resolution=1024, num_channels=1):
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
     control_image = TF.to_tensor(control_image)
+    control_image = TF.normalize(control_image, [0.5], [0.5]) if normalize_adapter_image else control_image
 
     example["image"] = image
     example["control_image"] = control_image
@@ -271,7 +272,7 @@ def sketch_image_transform(example, resolution=1024, num_channels=1):
     return example
 
 
-def recolor_image_transform(example, resolution=1024, num_channels=1):
+def recolor_image_transform(example, resolution=1024, num_channels=1, normalize_adapter_image=False):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
 
@@ -284,6 +285,7 @@ def recolor_image_transform(example, resolution=1024, num_channels=1):
 
     image = TF.to_tensor(image)
     image = TF.normalize(image, [0.5], [0.5])
+    control_image = TF.normalize(control_image, [0.5], [0.5]) if normalize_adapter_image else control_image
 
     example["image"] = image
     example["control_image"] = control_image
@@ -329,6 +331,7 @@ class Text2ImageDataset:
         control_type: str = "canny",
         feature_extractor: Optional[DPTFeatureExtractor] = None,
         num_channels: int = 1,
+        normalize_adapter_image=False,
     ):
         if not isinstance(train_shards_path_or_url, str):
             train_shards_path_or_url = [list(braceexpand(urls)) for urls in train_shards_path_or_url]
@@ -340,7 +343,10 @@ class Text2ImageDataset:
 
         if control_type == "canny":
             image_transform = functools.partial(
-                canny_image_transform, resolution=resolution, num_channels=num_channels
+                canny_image_transform,
+                resolution=resolution,
+                num_channels=num_channels,
+                normalize_adapter_image=normalize_adapter_image,
             )
         elif control_type == "depth":
             image_transform = functools.partial(
@@ -352,7 +358,10 @@ class Text2ImageDataset:
             )
         elif control_type == "recolor":
             image_transform = functools.partial(
-                recolor_image_transform, resolution=resolution, num_channels=num_channels
+                recolor_image_transform,
+                resolution=resolution,
+                num_channels=num_channels,
+                normalize_adapter_image=normalize_adapter_image,
             )
 
         processing_pipeline = [
@@ -903,6 +912,12 @@ def parse_args(input_args=None):
         default=1,
         help="Number of channels of the adapter input.",
     )
+    parser.add_argument(
+        "--normalize_adapter_image",
+        action="store_true",
+        default=False,
+        help="Whether or not to normalize the adapter image.",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -1290,6 +1305,7 @@ def main(args):
         control_type=args.control_type,
         feature_extractor=feature_extractor,
         num_channels=args.adapter_in_channels,
+        normalize_adapter_image=args.normalize_adapter_image,
     )
     train_dataloader = dataset.train_dataloader
 
