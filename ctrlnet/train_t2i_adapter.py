@@ -369,7 +369,7 @@ def mask_image_transform(example, resolution=1024):
     
     # create masked image
     masked_image = image.clone()
-    masked_image[image_mask > 0.5] = -1.0  # set as masked pixel
+    masked_image[mask > 0.5] = -1.0  # set as masked pixel
 
     # normalize image
     image = TF.normalize(image, [0.5], [0.5])
