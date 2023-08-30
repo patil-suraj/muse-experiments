@@ -201,13 +201,13 @@ def control_transform(image, low_threshold=100, high_threshold=200, shift_range=
     low_threshold = low_threshold + random.randint(-shift_range, shift_range)
     high_threshold = high_threshold + random.randint(-shift_range, shift_range)
 
-    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    image = np.array(image.convert("RGB"))
     image = cv2.Canny(image, low_threshold, high_threshold)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    control_image = Image.fromarray(image)
-    if num_channels == 1:
-        control_image = control_image.convert("L")
-    return control_image
+    image = Image.fromarray(image)
+    if num_channels == 3:
+        image = image[:, :, None]
+        image = np.concatenate([image, image, image], axis=2)
+    return image
 
 
 def canny_image_transform(example, resolution=1024, num_channels=1, normalize_adapter_image=False):
