@@ -203,10 +203,10 @@ def control_transform(image, low_threshold=100, high_threshold=200, shift_range=
 
     image = np.array(image.convert("RGB"))
     image = cv2.Canny(image, low_threshold, high_threshold)
-    image = Image.fromarray(image)
     if num_channels == 3:
         image = image[:, :, None]
         image = np.concatenate([image, image, image], axis=2)
+    image = Image.fromarray(image)
     return image
 
 
