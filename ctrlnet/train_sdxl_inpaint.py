@@ -431,7 +431,7 @@ def log_validation(vae, unet, args, accelerator, weight_dtype, step):
                     mask_image=mask_image,
                     num_inference_steps=30,
                     num_images_per_prompt=4,
-                    strength=0.8,
+                    strength=1,
                     generator=generator,
                 ).images[0]
             images.append(image)
@@ -1010,7 +1010,7 @@ def main(args):
 
     # Create EMA for the unet.
     if args.use_ema:
-        ema_unet = EMAModel(unet.parameters(), model_cls=UNet2DConditionModel, model_config=unet.config)
+        ema_unet = EMAModel(unet.parameters(), model_cls=UNet2DConditionModel, model_config=unet.config, inv_gamma=1, power=3 / 4)
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
@@ -1340,8 +1340,13 @@ def main(args):
                 bsz = latents.shape[0]
 
                 # Sample a random timestep for each image
-                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
-                timesteps = timesteps.long()
+                # timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+                # timesteps = timesteps.long()
+                # Cubic sampling to sample a random timestep for each image
+                timesteps = torch.rand((bsz,), device=latents.device)
+                timesteps = (1 - timesteps**3) * noise_scheduler.config.num_train_timesteps
+                timesteps = timesteps.long().to(noise_scheduler.timesteps.dtype)
+                timesteps = timesteps.clamp(0, noise_scheduler.config.num_train_timesteps - 1)
 
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
