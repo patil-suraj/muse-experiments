@@ -79,7 +79,7 @@ PROGRAM="train_t2i_adapter.py \
     --report_to=wandb \
     --resume_from_checkpoint=latest \
     --push_to_hub \
-    --use_euler --use_non_uniform_timesteps --adapter_in_channels=3 --control_type=lineart \
+    --use_euler --use_non_uniform_timesteps --adapter_in_channels=3 --control_type=lineart --detection_resolution=384 \
     "
 
 # Note: it is important to escape `$SLURM_PROCID` since we want the srun on each node to evaluate this variable
