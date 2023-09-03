@@ -1175,7 +1175,7 @@ def main(args):
     #     downscale_factor=16,
     #     adapter_type="full_adapter_xl",
     # )
-    T2IAdapter.from_pretrained("/fsx/suraj/t2i-lineart/checkpoint-20000")
+    t2iadapter = T2IAdapter.from_pretrained("/fsx/suraj/t2i-lineart/checkpoint-20000")
 
     # Create EMA for the adapter.
     if args.use_ema:
