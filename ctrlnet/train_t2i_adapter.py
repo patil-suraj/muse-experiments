@@ -1233,7 +1233,7 @@ def main(args):
                 model = models.pop()
 
                 # load diffusers style into model
-                load_model = ControlNetModel.from_pretrained(input_dir, subfolder="t2iadapter")
+                load_model = T2IAdapter.from_pretrained(input_dir, subfolder="t2iadapter")
                 model.register_to_config(**load_model.config)
 
                 model.load_state_dict(load_model.state_dict())
