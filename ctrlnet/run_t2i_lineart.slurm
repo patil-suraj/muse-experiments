@@ -77,7 +77,7 @@ PROGRAM="train_t2i_adapter.py \
     --gradient_accumulation_steps=1 \
     --seed=46534634 \
     --report_to=wandb \
-    --resume_from_checkpoint=latest \
+    --resume_from_checkpoint=False \
     --push_to_hub \
     --use_euler --use_non_uniform_timesteps --adapter_in_channels=3 --control_type=lineart --detection_resolution=384 \
     "

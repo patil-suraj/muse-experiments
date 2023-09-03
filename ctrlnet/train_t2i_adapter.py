@@ -1168,13 +1168,14 @@ def main(args):
     )
 
     logger.info("Initializing t2iadapter weights from unet")
-    t2iadapter = T2IAdapter(
-        in_channels=args.adapter_in_channels,
-        channels=(320, 640, 1280, 1280),
-        num_res_blocks=2,
-        downscale_factor=16,
-        adapter_type="full_adapter_xl",
-    )
+    # t2iadapter = T2IAdapter(
+    #     in_channels=args.adapter_in_channels,
+    #     channels=(320, 640, 1280, 1280),
+    #     num_res_blocks=2,
+    #     downscale_factor=16,
+    #     adapter_type="full_adapter_xl",
+    # )
+    T2IAdapter.from_pretrained("/fsx/suraj/t2i-lineart/checkpoint-20000")
 
     # Create EMA for the adapter.
     if args.use_ema:
