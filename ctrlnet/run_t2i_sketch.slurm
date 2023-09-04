@@ -72,7 +72,7 @@ PROGRAM="train_t2i_adapter.py \
     --validation_steps=500 \
     --train_batch_size=16 \
     --gradient_checkpointing \
-    --use_8bit_adam \
+    --use_prodigy_optim  --use_cosine_annealing_schedule --adam_weight_decay=0 \
     --enable_xformers_memory_efficient_attention \
     --gradient_accumulation_steps=1 \
     --seed=42 \
