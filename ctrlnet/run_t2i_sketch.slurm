@@ -62,7 +62,7 @@ PROGRAM="train_t2i_adapter.py \
     --mixed_precision=fp16 \
     --resolution=1024 \
     --learning_rate=1 \
-    --max_train_steps=40000 \
+    --max_train_steps=20000 \
     --max_train_samples=3000000 \
     --dataloader_num_workers=8 \
     --validation_image=/admin/home/suraj/code/muse-experiments/ctrlnet/sketch-images  \
@@ -72,7 +72,7 @@ PROGRAM="train_t2i_adapter.py \
     --validation_steps=500 \
     --train_batch_size=16 \
     --gradient_checkpointing \
-    --use_prodigy_optim  --use_cosine_annealing_schedule --adam_weight_decay=0 \
+    --use_8bit_adam \
     --enable_xformers_memory_efficient_attention \
     --gradient_accumulation_steps=1 \
     --seed=42 \
