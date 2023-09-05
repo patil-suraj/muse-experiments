@@ -47,10 +47,18 @@ from lineart import LineartDetector
 from packaging import version
 from pidinet import pidinet
 from PIL import Image
+from style_adapter import StyleAdapter
 from torch.utils.data import default_collate
 from torchvision import transforms
 from tqdm.auto import tqdm
-from transformers import AutoTokenizer, DPTFeatureExtractor, DPTForDepthEstimation, PretrainedConfig
+from transformers import (
+    AutoTokenizer,
+    CLIPProcessor,
+    CLIPVisionModel,
+    DPTFeatureExtractor,
+    DPTForDepthEstimation,
+    PretrainedConfig,
+)
 from webdataset.tariterators import (
     base_plus_ext,
     tar_file_expander,
@@ -61,7 +69,6 @@ from webdataset.tariterators import (
 import diffusers
 from diffusers import (
     AutoencoderKL,
-    ControlNetModel,
     EulerDiscreteScheduler,
     StableDiffusionXLAdapterPipeline,
     T2IAdapter,
@@ -103,15 +110,21 @@ def colorize(
 ):
     """Converts a depth map to a color image.
     Args:
-        value (torch.Tensor, numpy.ndarry): Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
-        vmin (float, optional): vmin-valued entries are mapped to start color of cmap. If None, value.min() is used. Defaults to None.
-        vmax (float, optional):  vmax-valued entries are mapped to end color of cmap. If None, value.max() is used. Defaults to None.
+        value (torch.Tensor, numpy.ndarry):
+            Input depth map. Shape: (H, W) or (1, H, W) or (1, 1, H, W). All singular dimensions are squeezed
+        vmin (float, optional):
+            vmin-valued entries are mapped to start color of cmap. If None, value.min() is used. Defaults to None.
+        vmax (float, optional):
+            vmax-valued entries are mapped to end color of cmap. If None, value.max() is used. Defaults to None.
         cmap (str, optional): matplotlib colormap to use. Defaults to 'magma_r'.
-        invalid_val (int, optional): Specifies value of invalid pixels that should be colored as 'background_color'. Defaults to -99.
+        invalid_val (int, optional):
+            Specifies value of invalid pixels that should be colored as 'background_color'. Defaults to -99.
         invalid_mask (numpy.ndarray, optional): Boolean mask for invalid regions. Defaults to None.
-        background_color (tuple[int], optional): 4-tuple RGB color to give to invalid pixels. Defaults to (128, 128, 128, 255).
+        background_color (tuple[int], optional):
+            4-tuple RGB color to give to invalid pixels. Defaults to (128, 128, 128, 255).
         gamma_corrected (bool, optional): Apply gamma correction to colored image. Defaults to False.
-        value_transform (Callable, optional): Apply transform function to valid pixels before coloring. Defaults to None.
+        value_transform (Callable, optional):
+            Apply transform function to valid pixels before coloring. Defaults to None.
     Returns:
         numpy.ndarray, dtype - uint8: Colored depth map. Shape: (H, W, 4)
     """
@@ -166,8 +179,8 @@ def filter_keys(key_set):
 def group_by_keys_nothrow(data, keys=base_plus_ext, lcase=True, suffixes=None, handler=None):
     """Return function over iterator that groups key, value pairs into samples.
 
-    :param keys: function that splits the key into key and extension (base_plus_ext)
-    :param lcase: convert suffixes to lower case (Default value = True)
+    :param keys: function that splits the key into key and extension (base_plus_ext) :param lcase: convert suffixes to
+    lower case (Default value = True)
     """
     current_sample = None
     for filesample in data:
@@ -362,7 +375,7 @@ def mask_image_transform(example, resolution=1024):
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = TF.crop(image, c_top, c_left, resolution, resolution)
     image = TF.to_tensor(image)
-    
+
     # create masked image
     mask = torch.from_numpy(mask)
     masked_image = image.clone().permute(1, 2, 0)
@@ -374,6 +387,26 @@ def mask_image_transform(example, resolution=1024):
 
     example["image"] = image
     example["control_image"] = masked_image
+    example["crop_coords"] = (c_top, c_left)
+
+    return example
+
+
+def style_image_transform(example, feature_extractor, resolution=1024):
+    image = example["image"]
+    image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
+
+    # get crop coordinates
+    c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
+    image = TF.crop(image, c_top, c_left, resolution, resolution)
+
+    control_image = feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze(0)
+
+    image = TF.to_tensor(image)
+    image = TF.normalize(image, [0.5], [0.5])
+
+    example["image"] = image
+    example["control_image"] = control_image
     example["crop_coords"] = (c_top, c_left)
 
     return example
@@ -456,6 +489,10 @@ class Text2ImageDataset:
             )
         elif control_type == "mask":
             image_transform = functools.partial(mask_image_transform, resolution=resolution)
+        elif control_type == "style":
+            image_transform = functools.partial(
+                style_image_transform, feature_extractor=feature_extractor, resolution=resolution
+            )
 
         processing_pipeline = [
             wds.decode("pil", handler=wds.ignore_and_continue),
@@ -1168,14 +1205,16 @@ def main(args):
     )
 
     logger.info("Initializing t2iadapter weights from unet")
-    # t2iadapter = T2IAdapter(
-    #     in_channels=args.adapter_in_channels,
-    #     channels=(320, 640, 1280, 1280),
-    #     num_res_blocks=2,
-    #     downscale_factor=16,
-    #     adapter_type="full_adapter_xl",
-    # )
-    t2iadapter = T2IAdapter.from_pretrained("TencentARC/t2i-adapter-sketch-sdxl-1.0")
+    if args.control_type == "style":
+        t2iadapter = StyleAdapter(context_dim=2048)
+    else:
+        t2iadapter = T2IAdapter(
+            in_channels=args.adapter_in_channels,
+            channels=(320, 640, 1280, 1280),
+            num_res_blocks=2,
+            downscale_factor=16,
+            adapter_type="full_adapter_xl",
+        )
 
     # Create EMA for the adapter.
     if args.use_ema:
@@ -1203,6 +1242,10 @@ def main(args):
         sketch_model.requires_grad_(False)
     elif args.control_type == "lineart":
         lineart_model = LineartDetector()
+    elif args.control_type == "style":
+        feature_extractor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+        clip_vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
+        clip_vision_model.requires_grad_(False)
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
@@ -1344,6 +1387,8 @@ def main(args):
         sketch_model.to(accelerator.device)
     elif args.control_type == "lineart":
         lineart_model.to(accelerator.device)
+    elif args.control_type == "style":
+        clip_vision_model.to(accelerator.device, dtype=weight_dtype)
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
@@ -1587,6 +1632,11 @@ def main(args):
                     control_image = line_map.float() / 255.0
                     if args.adapter_in_channels == 3:
                         control_image = torch.cat([control_image] * 3, dim=1)
+                elif args.control_type == "style":
+                    control_image = control_image.to(dtype=weight_dtype)
+                    control_image = clip_vision_model(control_image).last_hidden_state
+                    control_image = t2iadapter(control_image)
+                    control_image = control_image.to(dtype=weight_dtype)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
@@ -1599,7 +1649,7 @@ def main(args):
                     timesteps = (1 - timesteps**3) * noise_scheduler.config.num_train_timesteps
                     timesteps = timesteps.long().to(noise_scheduler.timesteps.dtype)
                     timesteps = timesteps.clamp(0, noise_scheduler.config.num_train_timesteps - 1)
-                    
+
                     # sample timestpes between 600 to 1000
                     # timesteps = torch.randint(
                     #     600, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device
@@ -1620,22 +1670,30 @@ def main(args):
                 else:
                     inp_noisy_latents = noisy_latents
 
+                prompt_embeds = encoded_text.pop("prompt_embeds")
+
                 # ControlNet conditioning.
-                t2iadapter_image = control_image.to(dtype=weight_dtype)
-                down_block_res_samples = t2iadapter(t2iadapter_image)
-                if args.use_euler and args.scale_down_block_res_samples:
-                    down_block_res_samples = [sample / ((sigmas**2 + 1) ** 0.5) for sample in down_block_res_samples]
+                if args.control_type == "style":
+                    prompt_embeds = torch.cat([prompt_embeds, control_image], dim=1)
+                    down_block_additional_residuals = None
+                else:
+                    t2iadapter_image = control_image.to(dtype=weight_dtype)
+                    down_block_res_samples = t2iadapter(t2iadapter_image)
+                    if args.use_euler and args.scale_down_block_res_samples:
+                        down_block_res_samples = [
+                            sample / ((sigmas**2 + 1) ** 0.5) for sample in down_block_res_samples
+                        ]
+                    down_block_additional_residuals = [
+                        sample.to(dtype=weight_dtype) for sample in down_block_res_samples
+                    ]
 
                 # Predict the noise residual
-                prompt_embeds = encoded_text.pop("prompt_embeds")
                 model_pred = unet(
                     inp_noisy_latents,
                     timesteps,
                     encoder_hidden_states=prompt_embeds,
                     added_cond_kwargs=encoded_text,
-                    down_block_additional_residuals=[
-                        sample.to(dtype=weight_dtype) for sample in down_block_res_samples
-                    ],
+                    down_block_additional_residuals=down_block_additional_residuals,
                 ).sample
 
                 if args.use_euler:
