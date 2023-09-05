@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import torch
 import torch.nn as nn
 from collections import OrderedDict
@@ -71,9 +72,8 @@ class StyleAdapter(nn.Module):
         return x
     
     def save_pretrained(self, save_directory):
-        # create directory if not exists
-        if not os.path.exists(save_directory):
-            os.makedirs(save_directory)
+        # create directory if not exists, create all parent directories if not exists
+        Path(save_directory).mkdir(parents=True, exist_ok=True)
         torch.save(self.state_dict(), os.path.join(save_directory, "pytorch_model.bin"))
     
     @classmethod
