@@ -71,6 +71,9 @@ class StyleAdapter(nn.Module):
         return x
     
     def save_pretrained(self, save_directory):
+        # create directory if not exists
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
         torch.save(self.state_dict(), os.path.join(save_directory, "pytorch_model.bin"))
     
     @classmethod
