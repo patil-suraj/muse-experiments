@@ -1168,14 +1168,13 @@ def main(args):
     )
 
     logger.info("Initializing t2iadapter weights from unet")
-    # t2iadapter = T2IAdapter(
-    #     in_channels=args.adapter_in_channels,
-    #     channels=(320, 640, 1280, 1280),
-    #     num_res_blocks=2,
-    #     downscale_factor=16,
-    #     adapter_type="full_adapter_xl",
-    # )
-    t2iadapter = T2IAdapter.from_pretrained("diffusers-adapter/t2i-adapter-sketch-sdxl-1.0")
+    t2iadapter = T2IAdapter(
+        in_channels=args.adapter_in_channels,
+        channels=(320, 640, 1280, 1280),
+        num_res_blocks=2,
+        downscale_factor=16,
+        adapter_type="full_adapter_xl",
+    )
 
     # Create EMA for the adapter.
     if args.use_ema:
@@ -1595,10 +1594,15 @@ def main(args):
                 # Sample a random timestep for each image
                 if args.use_non_uniform_timesteps:
                     # Cubic sampling to sample a random timestep for each image
-                    timesteps = torch.rand((bsz,), device=latents.device)
-                    timesteps = (1 - timesteps**3) * noise_scheduler.config.num_train_timesteps
-                    timesteps = timesteps.long().to(noise_scheduler.timesteps.dtype)
-                    timesteps = timesteps.clamp(0, noise_scheduler.config.num_train_timesteps - 1)
+                    # timesteps = torch.rand((bsz,), device=latents.device)
+                    # timesteps = (1 - timesteps**3) * noise_scheduler.config.num_train_timesteps
+                    # timesteps = timesteps.long().to(noise_scheduler.timesteps.dtype)
+                    # timesteps = timesteps.clamp(0, noise_scheduler.config.num_train_timesteps - 1)
+                    
+                    # sample timestpes between 600 to 1000
+                    timesteps = torch.randint(
+                        600, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device
+                    )
                 else:
                     timesteps = torch.randint(
                         0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device
