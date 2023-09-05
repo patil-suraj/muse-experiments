@@ -70,6 +70,7 @@ import diffusers
 from diffusers import (
     AutoencoderKL,
     EulerDiscreteScheduler,
+    StableDiffusionXLPipeline,
     StableDiffusionXLAdapterPipeline,
     T2IAdapter,
     UNet2DConditionModel,
@@ -557,19 +558,28 @@ def image_grid(imgs, rows, cols):
     return grid
 
 
-def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step):
+def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step, feature_extractor=None, clip_vision_model=None):
     logger.info("Running validation... ")
 
     adapter = accelerator.unwrap_model(adapter)
 
-    pipeline = StableDiffusionXLAdapterPipeline.from_pretrained(
-        args.pretrained_model_name_or_path,
-        vae=vae,
-        unet=unet,
-        adapter=adapter,
-        revision=args.revision,
-        torch_dtype=weight_dtype,
-    )
+    if args.control_type == "style":
+        pipeline = StableDiffusionXLPipeline.from_pretrained(
+            args.pretrained_model_name_or_path,
+            vae=vae,
+            unet=unet,
+            revision=args.revision,
+            torch_dtype=weight_dtype,
+        )
+    else:
+        pipeline = StableDiffusionXLAdapterPipeline.from_pretrained(
+            args.pretrained_model_name_or_path,
+            vae=vae,
+            unet=unet,
+            adapter=adapter,
+            revision=args.revision,
+            torch_dtype=weight_dtype,
+        )
     pipeline = pipeline.to(accelerator.device)
     pipeline.set_progress_bar_config(disable=True)
 
@@ -588,19 +598,38 @@ def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step):
 
     for validation_prompt, validation_image in zip(validation_prompts, validation_images):
         validation_image = Image.open(validation_image)
-        if args.adapter_in_channels == 1:
+        if args.adapter_in_channels == 1 and args.control_type != "style":
             validation_image = validation_image.convert("L")
         else:
             validation_image = validation_image.convert("RGB")
         validation_image = validation_image.resize((args.resolution, args.resolution))
 
+        if args.control_type == "style":
+            clip_inputs = feature_extractor(images=validation_image, return_tensors="pt").pixel_values.to(clip_vision_model.device, dtype=weight_dtype)
+            clip_out = clip_vision_model(clip_inputs).last_hidden_state.to(torch.float32)
+            style_output = adapter(clip_out).to(weight_dtype)
+            with torch.autocast("cuda"):
+                prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = pipeline.encode_prompt(validation_prompt)
+                prompt_embeds = torch.cat([prompt_embeds, style_output], dim=1)
+                negative_prompt_embeds = torch.cat([negative_prompt_embeds, style_output], dim=1)
+            
         images = []
 
         for _ in range(args.num_validation_images):
             with torch.autocast("cuda"):
-                image = pipeline(
-                    prompt=validation_prompt, image=validation_image, num_inference_steps=20, generator=generator
-                ).images[0]
+                if args.control_type == "style":
+                    image = pipeline(
+                        prompt_embeds=prompt_embeds,
+                        negative_prompt_embeds=negative_prompt_embeds,
+                        pooled_prompt_embeds=pooled_prompt_embeds,
+                        negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
+                        num_inference_steps=20,
+                        generator=generator,
+                    ).images[0]
+                else:
+                    image = pipeline(
+                        prompt=validation_prompt, image=validation_image, num_inference_steps=20, generator=generator
+                    ).images[0]
             images.append(image)
 
         image_logs.append(
@@ -1224,6 +1253,7 @@ def main(args):
 
     feature_extractor = None
     depth_model = None
+    clip_vision_model = None
     if args.control_type == "depth":
         if args.depth_model_name_or_path == "zoe":
             # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
@@ -1764,7 +1794,7 @@ def main(args):
                             ema_adapter.copy_to(t2iadapter.parameters())
 
                         image_logs = log_validation(
-                            vae, unet, t2iadapter, args, accelerator, weight_dtype, global_step
+                            vae, unet, t2iadapter, args, accelerator, weight_dtype, global_step, feature_extractor, clip_vision_model
                         )
 
                         # Switch back to the original UNet parameters.
