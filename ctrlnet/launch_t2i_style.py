@@ -1,0 +1,1 @@
+sbatch /admin/home/suraj/code/muse-experiments/ctrlnet/run_t2i_style.slurm
