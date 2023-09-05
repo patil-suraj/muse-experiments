@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=t2i-style
-#SBATCH --nodes=1
+#SBATCH --nodes=8
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
 #SBATCH --gres=gpu:1
@@ -26,7 +26,7 @@ touch $LOG_PATH
 pushd $REPO
 
 
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 NNODES=$SLURM_NNODES
 NUM_GPUS=$((GPUS_PER_NODE*SLURM_NNODES))
 
@@ -62,14 +62,14 @@ PROGRAM="train_t2i_adapter.py \
     --mixed_precision=fp16 \
     --resolution=1024 \
     --learning_rate=1e-5 \
-    --max_train_steps=10 \
+    --max_train_steps=440000 \
     --max_train_samples=3000000 \
     --dataloader_num_workers=8 \
     --validation_image=/admin/home/suraj/code/muse-experiments/ctrlnet/style_images  \
     --validation_prompt 'a picture of a cat, 4k photo, highly detailed' 'a jungle, 4k photo, highly detailed' 'a truck, 4k photo, highly detailed' 'a digital painting of a lion, highly detailed' \
     --train_shards_path_or_url='pipe:aws s3 cp s3://muse-datasets/laion-aesthetic6plus-min512-data/{00000..01210}.tar -' \
     --proportion_empty_prompts=0.5 \
-    --validation_steps=10 \
+    --validation_steps=500 \
     --train_batch_size=16 \
     --gradient_checkpointing \
     --use_8bit_adam \
