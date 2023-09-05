@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 from collections import OrderedDict
@@ -69,14 +70,12 @@ class StyleAdapter(nn.Module):
 
         return x
     
-    @classmethod
     def save_pretrained(self, save_directory):
-        torch.save(self.state_dict(), save_directory)
+        torch.save(self.state_dict(), os.path.join(save_directory, "pytorch_model.bin"))
     
     @classmethod
-    def from_pretrained(self, pretrained_model_name_or_path):
-        model = StyleAdapter(context_dim=2048)
-        model.load_state_dict(torch.load(pretrained_model_name_or_path))
+    def from_pretrained(cls, pretrained_model_name_or_path):
+        model = cls(context_dim=2048)
+        model.load_state_dict(torch.load(os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")))
         return model
-    
 
