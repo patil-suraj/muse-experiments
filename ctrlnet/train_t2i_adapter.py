@@ -395,7 +395,7 @@ def mask_image_transform(example, resolution=1024):
     return example
 
 
-def style_image_transform(example, feature_extractor, resolution=1024):
+def style_image_transform(example, feature_extractor, resolution=1024, use_crop_for_style=False):
     image = example["image"]
     image = TF.resize(image, resolution, interpolation=transforms.InterpolationMode.BILINEAR)
 
@@ -403,6 +403,8 @@ def style_image_transform(example, feature_extractor, resolution=1024):
     c_top, c_left, _, _ = transforms.RandomCrop.get_params(image, output_size=(resolution, resolution))
     image = TF.crop(image, c_top, c_left, resolution, resolution)
 
+    if use_crop_for_style:
+        control_image = transforms.CenterCrop(512)(image)
     control_image = feature_extractor(images=image, return_tensors="pt").pixel_values.squeeze(0)
 
     image = TF.to_tensor(image)
@@ -454,6 +456,7 @@ class Text2ImageDataset:
         num_channels: int = 1,
         normalize_adapter_image=False,
         detection_resolution=None,
+        use_crop_for_style=False,
     ):
         if not isinstance(train_shards_path_or_url, str):
             train_shards_path_or_url = [list(braceexpand(urls)) for urls in train_shards_path_or_url]
@@ -494,7 +497,7 @@ class Text2ImageDataset:
             image_transform = functools.partial(mask_image_transform, resolution=resolution)
         elif control_type == "style":
             image_transform = functools.partial(
-                style_image_transform, feature_extractor=feature_extractor, resolution=resolution
+                style_image_transform, feature_extractor=feature_extractor, resolution=resolution, use_crop_for_style=use_crop_for_style
             )
 
         processing_pipeline = [
@@ -610,7 +613,11 @@ def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step, fe
             clip_inputs = feature_extractor(images=validation_image, return_tensors="pt").pixel_values.to(style_model.device, dtype=weight_dtype)
             clip_out = style_model(clip_inputs).last_hidden_state.to(torch.float32)
             if args.style_model_type != "clip":
-                clip_out = clip_out[:, :1, :] if args.use_dino_cls_token else clip_out[:, 1:, :]
+                clip_out = clip_out[:, :1, :] if args.use_dino_cls_token else clip_out
+            
+            if args.dont_use_cls_token:
+                clip_out = clip_out[:, 1:, :]
+
             style_output = adapter(clip_out).to(weight_dtype)
             with torch.autocast("cuda"):
                 prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = pipeline.encode_prompt(validation_prompt)
@@ -1102,6 +1109,18 @@ def parse_args(input_args=None):
         default=False,
         help="Whether or not to use the CLS token from DINO.",
     )
+    parser.add_argument(
+        "--dont_use_cls_token",
+        action="store_true",
+        default=False,
+        help="Whether or not to use the CLS token.",
+    )
+    parser.add_argument(
+        "--use_crop_for_style",
+        action="store_true",
+        default=False,
+        help="Whether or not to use crop for style.",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -1509,6 +1528,7 @@ def main(args):
         num_channels=args.adapter_in_channels,
         normalize_adapter_image=args.normalize_adapter_image,
         detection_resolution=args.detection_resolution,
+        use_crop_for_style=args.use_crop_for_style,
     )
     train_dataloader = dataset.train_dataloader
 
@@ -1692,8 +1712,13 @@ def main(args):
                 elif args.control_type == "style":
                     control_image = control_image.to(dtype=weight_dtype)
                     control_image = style_model(control_image).last_hidden_state
+                    
                     if args.style_model_type != "clip":
-                        control_image = control_image[:, :1, :] if args.use_dino_cls_token else control_image[:, 1:, :]
+                        control_image = control_image[:, :1, :] if args.use_dino_cls_token else control_image
+                    
+                    if args.dont_use_cls_token:
+                        control_image = control_image[:, 1:, :]
+
                     control_image = t2iadapter(control_image)
                     control_image = control_image.to(dtype=weight_dtype)
 
