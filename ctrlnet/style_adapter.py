@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 
+from huggingface_hub import hf_hub_download
 
 class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
@@ -79,6 +80,10 @@ class StyleAdapter(nn.Module):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path):
         model = cls(context_dim=2048)
-        model.load_state_dict(torch.load(os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")))
+        if os.path.isdir(pretrained_model_name_or_path):
+            model_path = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
+        else:
+            model_path = hf_hub_download(pretrained_model_name_or_path, "pytorch_model.bin")
+        model.load_state_dict(torch.load(model_path))
         return model
 

@@ -1235,8 +1235,10 @@ def main(args):
 
     logger.info("Initializing t2iadapter weights from unet")
     if args.control_type == "style":
+        model_cls = StyleAdapter
         t2iadapter = StyleAdapter(context_dim=2048)
     else:
+        model_cls = T2IAdapter
         t2iadapter = T2IAdapter(
             in_channels=args.adapter_in_channels,
             channels=(320, 640, 1280, 1280),
@@ -1307,8 +1309,10 @@ def main(args):
                 model = models.pop()
 
                 # load diffusers style into model
-                load_model = T2IAdapter.from_pretrained(input_dir, subfolder="t2iadapter")
-                model.register_to_config(**load_model.config)
+                load_model = model_cls.from_pretrained(os.path.join(input_dir, "t2iadapter"))
+
+                if args.control_type != "style":
+                    model.register_to_config(**load_model.config)
 
                 model.load_state_dict(load_model.state_dict())
                 del load_model
