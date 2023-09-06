@@ -610,7 +610,7 @@ def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step, fe
             clip_inputs = feature_extractor(images=validation_image, return_tensors="pt").pixel_values.to(style_model.device, dtype=weight_dtype)
             clip_out = style_model(clip_inputs).last_hidden_state.to(torch.float32)
             if args.style_model_type != "clip":
-                clip_out = clip_out[:, 1:, :]
+                clip_out = clip_out[:, :1, :] if args.use_dino_cls_token else clip_out[:, 1:, :]
             style_output = adapter(clip_out).to(weight_dtype)
             with torch.autocast("cuda"):
                 prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = pipeline.encode_prompt(validation_prompt)
@@ -1095,6 +1095,12 @@ def parse_args(input_args=None):
         type=str,
         default="clip",
         help="Type of the style model.",
+    )
+    parser.add_argument(
+        "--use_dino_cls_token",
+        action="store_true",
+        default=False,
+        help="Whether or not to use the CLS token from DINO.",
     )
 
     if input_args is not None:
@@ -1687,7 +1693,7 @@ def main(args):
                     control_image = control_image.to(dtype=weight_dtype)
                     control_image = style_model(control_image).last_hidden_state
                     if args.style_model_type != "clip":
-                        control_image = control_image[:, 1:, :]
+                        control_image = control_image[:, :1, :] if args.use_dino_cls_token else control_image[:, 1:, :]
                     control_image = t2iadapter(control_image)
                     control_image = control_image.to(dtype=weight_dtype)
 
