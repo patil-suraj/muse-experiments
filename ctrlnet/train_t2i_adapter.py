@@ -55,6 +55,8 @@ from transformers import (
     AutoTokenizer,
     CLIPProcessor,
     CLIPVisionModel,
+    AutoProcessor,
+    Dinov2Model,
     DPTFeatureExtractor,
     DPTForDepthEstimation,
     PretrainedConfig,
@@ -558,7 +560,7 @@ def image_grid(imgs, rows, cols):
     return grid
 
 
-def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step, feature_extractor=None, clip_vision_model=None):
+def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step, feature_extractor=None, style_model=None):
     logger.info("Running validation... ")
 
     adapter = accelerator.unwrap_model(adapter)
@@ -605,8 +607,10 @@ def log_validation(vae, unet, adapter, args, accelerator, weight_dtype, step, fe
         validation_image = validation_image.resize((args.resolution, args.resolution))
 
         if args.control_type == "style":
-            clip_inputs = feature_extractor(images=validation_image, return_tensors="pt").pixel_values.to(clip_vision_model.device, dtype=weight_dtype)
-            clip_out = clip_vision_model(clip_inputs).last_hidden_state.to(torch.float32)
+            clip_inputs = feature_extractor(images=validation_image, return_tensors="pt").pixel_values.to(style_model.device, dtype=weight_dtype)
+            clip_out = style_model(clip_inputs).last_hidden_state.to(torch.float32)
+            if args.style_model_type != "clip":
+                clip_out = clip_out[:, 1:, :]
             style_output = adapter(clip_out).to(weight_dtype)
             with torch.autocast("cuda"):
                 prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds = pipeline.encode_prompt(validation_prompt)
@@ -1086,6 +1090,12 @@ def parse_args(input_args=None):
         default=False,
         help="Whether or not to normalize the adapter image.",
     )
+    parser.add_argument(
+        "--style_model_type",
+        type=str,
+        default="clip",
+        help="Type of the style model.",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -1255,7 +1265,7 @@ def main(args):
 
     feature_extractor = None
     depth_model = None
-    clip_vision_model = None
+    style_model = None
     if args.control_type == "depth":
         if args.depth_model_name_or_path == "zoe":
             # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
@@ -1275,9 +1285,15 @@ def main(args):
     elif args.control_type == "lineart":
         lineart_model = LineartDetector()
     elif args.control_type == "style":
-        feature_extractor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
-        clip_vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
-        clip_vision_model.requires_grad_(False)
+        
+        if args.style_model_type == "clip":
+            feature_extractor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+            style_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
+        else:
+            feature_extractor = AutoProcessor.from_pretrained("facebook/dinov2-large")
+            style_model = Dinov2Model.from_pretrained("facebook/dinov2-large")
+        
+        style_model.requires_grad_(False)
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
@@ -1423,7 +1439,7 @@ def main(args):
     elif args.control_type == "lineart":
         lineart_model.to(accelerator.device)
     elif args.control_type == "style":
-        clip_vision_model.to(accelerator.device, dtype=weight_dtype)
+        style_model.to(accelerator.device, dtype=weight_dtype)
 
     # Here, we compute not just the text embeddings but also the additional embeddings
     # needed for the SD XL UNet to operate.
@@ -1669,7 +1685,9 @@ def main(args):
                         control_image = torch.cat([control_image] * 3, dim=1)
                 elif args.control_type == "style":
                     control_image = control_image.to(dtype=weight_dtype)
-                    control_image = clip_vision_model(control_image).last_hidden_state
+                    control_image = style_model(control_image).last_hidden_state
+                    if args.style_model_type != "clip":
+                        control_image = control_image[:, 1:, :]
                     control_image = t2iadapter(control_image)
                     control_image = control_image.to(dtype=weight_dtype)
 
@@ -1799,7 +1817,7 @@ def main(args):
                             ema_adapter.copy_to(t2iadapter.parameters())
 
                         image_logs = log_validation(
-                            vae, unet, t2iadapter, args, accelerator, weight_dtype, global_step, feature_extractor, clip_vision_model
+                            vae, unet, t2iadapter, args, accelerator, weight_dtype, global_step, feature_extractor, style_model
                         )
 
                         # Switch back to the original UNet parameters.
