@@ -385,11 +385,14 @@ def mask_image_transform(example, resolution=1024):
     masked_image[mask > 0.5] = -1.0  # set as masked pixel
     masked_image = masked_image.permute(2, 0, 1)
 
+    # concatenate mask and masked image on channel dimension
+    control_image = torch.cat([masked_image, mask[None, :, :]], dim=0)
+
     # normalize image
     image = TF.normalize(image, [0.5], [0.5])
 
     example["image"] = image
-    example["control_image"] = masked_image
+    example["control_image"] = control_image
     example["crop_coords"] = (c_top, c_left)
 
     return example
