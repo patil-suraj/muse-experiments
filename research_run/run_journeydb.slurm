@@ -17,7 +17,7 @@ conda activate muse
 echo "START TIME: $(date)"
 
 MUSE_REPO=/admin/home/suraj/code/muse
-OUTPUT_DIR=/fsx/suraj/research-run
+OUTPUT_DIR=/fsx/suraj/research-run-512-journeydb
 LOG_PATH=$OUTPUT_DIR/main_log.txt
 CONFIG_PATH=/admin/home/suraj/code/muse-experiments/research_run/config_journeydb.yaml
 
