@@ -1,0 +1,1 @@
+sbatch /admin/home/suraj/code/muse-experiments/research_run/run_journeydb.slurm
