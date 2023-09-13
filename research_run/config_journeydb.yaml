@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "research-run-512-journeydb"
-    output_dir: "research-run-512-journeydb"
+    name: "research-run-512-journeydb-fused-norm"
+    output_dir: "research-run-512-journeydb-fused-norm"
     max_train_examples: 1000000000
     max_eval_examples: 20000
     save_every: 1000
@@ -65,6 +65,7 @@ model:
         micro_cond_encode_dim: 256
         micro_cond_embed_dim: 1280
         force_down_up_sample: True
+        use_fused_residual_norm: True
 
     gradient_checkpointing: True
     enable_xformers_memory_efficient_attention: True
