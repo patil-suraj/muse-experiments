@@ -12,7 +12,7 @@ experiment:
     generate_every: 10
     log_every: 10
     log_grad_norm_every: 500
-    resume_from_checkpoint: /fsx/william/research-run-512-with-downsample/checkpoint-484000
+    resume_from_checkpoint: /fsx/william/research-run-512-with-downsample/checkpoint-508000
     resume_lr_scheduler: True
     dont_resume_optimizer: True
 
