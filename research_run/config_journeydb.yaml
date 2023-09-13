@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "research-run-512-journeydb-fused-norm"
-    output_dir: "research-run-512-journeydb-fused-norm"
+    name: "research-run-512-journeydb"
+    output_dir: "research-run-512-journeydb"
     max_train_examples: 1000000000
     max_eval_examples: 20000
     save_every: 1000
