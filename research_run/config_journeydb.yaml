@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "research-run-512-journeydb"
-    output_dir: "research-run-512-journeydb"
+    name: "research-run-1024-journeydb"
+    output_dir: "research-run-1024-journeydb"
     max_train_examples: 1000000000
     max_eval_examples: 20000
     save_every: 1000
@@ -12,7 +12,7 @@ experiment:
     generate_every: 1000
     log_every: 50
     log_grad_norm_every: 500
-    resume_from_checkpoint: /fsx/william/research-run-512-with-downsample/checkpoint-508000
+    resume_from_checkpoint: /fsx/william/research-run-512-with-downsample/checkpoint-536000
     resume_lr_scheduler: True
     dont_resume_optimizer: True
     checkpoints_total_limit: 10
@@ -48,7 +48,7 @@ model:
         add_cross_attention: True
         project_encoder_hidden_states: True
         codebook_size: 8192
-        num_vq_tokens: 1024
+        num_vq_tokens: 4096
         initializer_range: 0.02
         norm_type: "rmsnorm"
         layer_norm_eps: 1e-6
@@ -80,7 +80,7 @@ dataset:
         batch_size: ${training.batch_size}
         shuffle_buffer_size: 1000
         num_workers: 4
-        resolution: 512
+        resolution: 1024
         pin_memory: True
         persistent_workers: True
         max_pnsfw: 0.45
@@ -88,7 +88,7 @@ dataset:
         min_aesthetic_score: 4.5
     preprocessing:
         max_seq_length: 77
-        resolution: 512
+        resolution: 1024
         center_crop: False
         random_flip: False
 
@@ -113,7 +113,7 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    batch_size: 72
+    batch_size: 32
     mixed_precision: "fp16"
     enable_tf32: True
     use_ema: True

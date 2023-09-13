@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=research-run-512-journeydb
+#SBATCH --job-name=research-run-1024-journeydb
 #SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
@@ -17,7 +17,7 @@ conda activate muse
 echo "START TIME: $(date)"
 
 MUSE_REPO=/admin/home/suraj/code/muse
-OUTPUT_DIR=/fsx/suraj/research-run-512-journeydb
+OUTPUT_DIR=/fsx/suraj/research-run-1024-journeydb
 LOG_PATH=$OUTPUT_DIR/main_log.txt
 CONFIG_PATH=/admin/home/suraj/code/muse-experiments/research_run/config_journeydb.yaml
 
