@@ -7,14 +7,15 @@ experiment:
     output_dir: "research-run-512-journeydb"
     max_train_examples: 1000000000
     max_eval_examples: 20000
-    save_every: 10
-    eval_every: 10
-    generate_every: 10
-    log_every: 10
+    save_every: 1000
+    eval_every: 1000
+    generate_every: 1000
+    log_every: 50
     log_grad_norm_every: 500
     resume_from_checkpoint: /fsx/william/research-run-512-with-downsample/checkpoint-508000
     resume_lr_scheduler: True
     dont_resume_optimizer: True
+    checkpoints_total_limit: 10
 
 model:
     vq_model:
@@ -111,7 +112,7 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    batch_size: 64
+    batch_size: 72
     mixed_precision: "fp16"
     enable_tf32: True
     use_ema: True
