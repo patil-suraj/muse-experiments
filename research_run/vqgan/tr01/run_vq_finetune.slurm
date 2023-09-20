@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=vqgan-finetune-fp16
+#SBATCH --job-name=vqgan-finetune
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
@@ -16,9 +16,9 @@ conda activate muse
 echo "START TIME: $(date)"
 
 MUSE_REPO=/admin/home/suraj/code/muse
-OUTPUT_DIR=/fsx/suraj/vqgan-finetune-fp16
+OUTPUT_DIR=/fsx/suraj/vqgan-finetune
 LOG_PATH=$OUTPUT_DIR/main_log.txt
-CONFIG_PATH=/admin/home/suraj/code/muse-experiments/research_run/config_finetune_vqgan.yaml
+CONFIG_PATH=/admin/home/suraj/code/muse-experiments/research_run/vqgan/tr01/config_finetune_vqgan.yaml
 
 mkdir -p $OUTPUT_DIR
 touch $LOG_PATH
