@@ -72,3 +72,4 @@ training:
     scale_decoder_channels: False
     only_train_new_layers: True
     train_from_scratch: False
+    num_validation_log: 16
