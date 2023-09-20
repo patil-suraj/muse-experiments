@@ -68,8 +68,8 @@ training:
     disc_weight: 0.8
     perceptual_weight: 1.0
     scale_mid_block: False
-    scale_res_blocks: True
-    scale_decoder_channels: True
+    scale_res_blocks: False
+    scale_decoder_channels: False
     only_train_new_layers: False
     train_from_scratch: False
     num_validation_log: 16
