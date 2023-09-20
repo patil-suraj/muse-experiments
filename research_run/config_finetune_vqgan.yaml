@@ -60,7 +60,7 @@ training:
     enable_tf32: True
     use_ema: False
     seed: 9345104
-    max_train_steps: 600000
+    max_train_steps: 20
     overfit_one_batch: False
     max_grad_norm: null
     disc_start: 50000
