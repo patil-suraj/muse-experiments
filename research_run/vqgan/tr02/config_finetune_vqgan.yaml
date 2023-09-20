@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "vqgan-finetune-2x"
-    output_dir: "vqgan-finetune-2x"
+    name: "vqgan-finetune-512"
+    output_dir: "vqgan-finetune-512"
     max_train_examples: 700000000 # toal sucessfully downloaded images for laiona5plus
     max_eval_examples: 8118
     save_every: 1000
@@ -24,12 +24,12 @@ dataset:
         batch_size: ${training.batch_size}
         shuffle_buffer_size: 1000
         num_workers: 4
-        resolution: 256
+        resolution: 384
         pin_memory: True
         persistent_workers: True
     preprocessing:
         max_seq_length: 77
-        resolution: 256
+        resolution: 384
         center_crop: False
         random_flip: False
 
@@ -71,5 +71,5 @@ training:
     scale_res_blocks: True
     scale_decoder_channels: True
     only_train_new_layers: False
-    train_from_scratch: True
+    train_from_scratch: False
     num_validation_log: 16
