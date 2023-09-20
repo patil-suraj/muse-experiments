@@ -4,7 +4,6 @@
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
 #SBATCH --gres=gpu:1
-#SBATCH --exclusive
 #SBATCH --partition=production-cluster
 #SBATCH --output=/admin/home/suraj/logs/maskgit-imagenet/%x-%j.out
 
