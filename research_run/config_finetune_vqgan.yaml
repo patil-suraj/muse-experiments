@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "vqgan-finetune"
-    output_dir: "vqgan-finetune"
+    name: "vqgan-finetune-fp16"
+    output_dir: "vqgan-finetune-fp16"
     max_train_examples: 700000000 # toal sucessfully downloaded images for laiona5plus
     max_eval_examples: 8118
     save_every: 1000
@@ -56,7 +56,7 @@ lr_scheduler:
 training:
     gradient_accumulation_steps: 1
     batch_size: 32
-    mixed_precision: "no"
+    mixed_precision: "fp16"
     enable_tf32: True
     use_ema: True
     seed: 9345104
