@@ -1,0 +1,1 @@
+sbatch /admin/home/suraj/code/muse-experiments/research_run/vqgan/tr03/run_vq_finetune.slurm
