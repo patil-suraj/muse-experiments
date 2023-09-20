@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=96
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:8
 #SBATCH --partition=production-cluster
 #SBATCH --output=/admin/home/suraj/logs/maskgit-imagenet/%x-%j.out
 
@@ -30,7 +30,7 @@ CMD=" \
     experiment.output_dir=$OUTPUT_DIR \
     "
 
-GPUS_PER_NODE=1
+GPUS_PER_NODE=8
 NNODES=$SLURM_NNODES
 
 # set the visible GPUs
