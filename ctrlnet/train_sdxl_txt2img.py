@@ -976,11 +976,6 @@ def main(args):
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
-
-        # tensorboard cannot handle list types for config
-        tracker_config.pop("validation_prompt")
-        tracker_config.pop("validation_image")
-
         accelerator.init_trackers(args.tracker_project_name, config=tracker_config)
 
     # Train!
