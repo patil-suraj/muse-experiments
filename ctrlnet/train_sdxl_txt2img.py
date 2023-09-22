@@ -261,7 +261,6 @@ def log_validation(vae, unet, args, accelerator, weight_dtype, step):
                 prompt=prompt,
                 num_inference_steps=25,
                 num_images_per_prompt=4,
-                strength=1,
                 generator=generator,
             ).images
         image_logs.append({"validation_prompt": prompt, "images": images})
