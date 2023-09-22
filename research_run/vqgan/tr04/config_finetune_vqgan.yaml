@@ -8,8 +8,8 @@ experiment:
     max_train_examples: 700000000 # toal sucessfully downloaded images for laiona5plus
     max_eval_examples: 8118
     save_every: 1000
-    eval_every: 1000
-    generate_every: 1000
+    eval_every: 500
+    generate_every: 500
     log_every: 50
     log_grad_norm_every: 500
     resume_from_checkpoint: False
