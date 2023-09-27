@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "wdsr"
-    output_dir: "wdsr"
+    name: "wdsr-512"
+    output_dir: "wdsr-512"
     max_train_examples: 700000000 # toal sucessfully downloaded images for laiona5plus
     max_eval_examples: 8118
     save_every: 1000
@@ -24,12 +24,12 @@ dataset:
         batch_size: ${training.batch_size}
         shuffle_buffer_size: 1000
         num_workers: 8
-        resolution: 256
+        resolution: 512
         pin_memory: True
         persistent_workers: True
     preprocessing:
         max_seq_length: 77
-        resolution: 256
+        resolution: 512
         center_crop: False
         random_flip: False
 
@@ -55,7 +55,7 @@ lr_scheduler:
 
 training:
     gradient_accumulation_steps: 1
-    batch_size: 56
+    batch_size: 32
     mixed_precision: "fp16"
     enable_tf32: True
     use_ema: True
@@ -64,7 +64,7 @@ training:
     overfit_one_batch: False
     max_grad_norm: null
     disc_start: 10000
-    disc_factor: 1.0
+    disc_factor: 0.8
     disc_weight: 0.8
     perceptual_weight: 1.0
     num_validation_log: 16
