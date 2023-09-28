@@ -3,8 +3,8 @@ wandb:
 
 experiment:
     project: "muse"
-    name: "wdsr-512"
-    output_dir: "wdsr-512"
+    name: "wdsr-512-denoise"
+    output_dir: "wdsr-512-denoise"
     max_train_examples: 700000000 # toal sucessfully downloaded images for laiona5plus
     max_eval_examples: 8118
     save_every: 1000
@@ -68,3 +68,4 @@ training:
     disc_weight: 0.8
     perceptual_weight: 1.0
     num_validation_log: 16
+    denoise: True
