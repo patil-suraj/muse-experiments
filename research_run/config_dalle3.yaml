@@ -7,9 +7,9 @@ experiment:
     output_dir: "research-run-dalle3"
     max_train_examples: 1000
     max_eval_examples: 20000
-    save_every: 1000
+    save_every: 500
     eval_every: 10000
-    generate_every: 1000
+    generate_every: 500
     log_every: 50
     log_grad_norm_every: 500
     resume_from_checkpoint: "/fsx/suraj/research-run-512-journeydb/checkpoint-522000"
