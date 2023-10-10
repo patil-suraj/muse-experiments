@@ -14,7 +14,7 @@ experiment:
     log_grad_norm_every: 500
     resume_from_checkpoint: "/fsx/suraj/research-run-512-journeydb/checkpoint-522000"
     resume_lr_scheduler: True
-    dont_resume_optimizer: True
+    dont_resume_optimizer: False
     checkpoints_total_limit: 10
 
 model:
